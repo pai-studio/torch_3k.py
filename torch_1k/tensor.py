@@ -1,5 +1,6 @@
 import numpy as np
 from . import utils
+from . import backend
 from .log import log_function_call
 from .settings import log_settings, runtime_settings, using_config
 from . import functional as F
@@ -13,8 +14,10 @@ class Tensor:
     # 确保优先级高于np.ndarray的运算符
     __array_priority__ = 200
 
-    def __init__(self, data, name=None, log_enabled=None):
-        self.data = utils.ensure_ndarray(data)
+    def __init__(self, data, name=None, log_enabled=None, device=None, dtype=None):
+        if isinstance(data, Tensor):
+            data = data.data
+        self.data = backend.ensure_array(data, device=device, dtype=dtype)
         self.name = name
         if log_enabled is None:
             self.log_enabled = log_settings.get('tensor_log_enabled', False)
@@ -101,7 +104,23 @@ class Tensor:
         return self
 
     def numpy(self):
-        return self.data
+        return backend.as_numpy(self.data)
+
+    def to(self, device):
+        out = Tensor(backend.to_device(self.data, device), name=self.name,
+                     log_enabled=self.log_enabled)
+        if self.grad is not None:
+            out.grad = self.grad.to(device)
+        return out
+
+    def detach(self):
+        return Tensor(self.data, name=self.name, log_enabled=self.log_enabled)
+
+    def cpu(self):
+        return self.to('cpu')
+
+    def cuda(self):
+        return self.to('cuda')
 
     @classmethod
     def _get_shape(cls, *shape):
@@ -110,27 +129,32 @@ class Tensor:
         return shape
 
     @classmethod
-    def randn(self, *shape):
+    def randn(self, *shape, device=None):
         shape = self._get_shape(shape)
-        return Tensor(np.zeros(shape))
+        xp = backend.array_module_for_device(device)
+        return Tensor(xp.random.randn(*shape))
 
     @classmethod
-    def zeros(self, *shape):
+    def zeros(self, *shape, device=None):
         shape = self._get_shape(shape)
-        return Tensor(np.zeros(shape))
+        xp = backend.array_module_for_device(device)
+        return Tensor(xp.zeros(shape))
 
     @classmethod
-    def ones(self, *shape):
+    def ones(self, *shape, device=None):
         shape = self._get_shape(shape)
-        return Tensor(np.ones(shape))
+        xp = backend.array_module_for_device(device)
+        return Tensor(xp.ones(shape))
 
     @classmethod
     def zeros_like(self, data):
-        return Tensor(np.zeros(data.shape))
+        xp = backend.get_array_module(data.data if isinstance(data, Tensor) else data)
+        return Tensor(xp.zeros(data.shape))
 
     @classmethod
     def ones_like(self, data):
-        return Tensor(np.ones(data.shape))
+        xp = backend.get_array_module(data.data if isinstance(data, Tensor) else data)
+        return Tensor(xp.ones(data.shape))
 
     @property
     def T(self):
@@ -170,6 +194,10 @@ class Tensor:
     def dtype(self):
         return self.data.dtype
 
+    @property
+    def device(self):
+        return backend.device_of(self.data)
+
     def __repr__(self):
         return (
             f'Tensor({str(self.data)}, name={self.name}'
@@ -208,13 +236,25 @@ def make_tensor(data):
 def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
     a = ensure_tensor(a)
     b = ensure_tensor(b)
-    return a.shape == b.shape and np.allclose(a.data, b.data, rtol=rtol, atol=atol, equal_nan=equal_nan)
+    return a.shape == b.shape and np.allclose(a.numpy(), b.numpy(), rtol=rtol, atol=atol, equal_nan=equal_nan)
 
-def rand(*shape):
-    return Tensor(np.random.rand(*shape))
+def rand(*shape, device=None):
+    xp = backend.array_module_for_device(device)
+    return Tensor(xp.random.rand(*shape))
 
-def randn(*shape):
-    return Tensor(np.random.randn(*shape))
+def randn(*shape, device=None):
+    xp = backend.array_module_for_device(device)
+    return Tensor(xp.random.randn(*shape))
 
-def randint(*shape):
-    return Tensor(np.random.randint(*shape))
+def randint(*shape, device=None):
+    xp = backend.array_module_for_device(device)
+    return Tensor(xp.random.randint(*shape))
+
+def zeros(*shape, device=None):
+    return Tensor.zeros(*shape, device=device)
+
+def ones(*shape, device=None):
+    return Tensor.ones(*shape, device=device)
+
+def tensor(data, device=None, dtype=None):
+    return Tensor(data, device=device, dtype=dtype)

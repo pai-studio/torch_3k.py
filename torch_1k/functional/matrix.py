@@ -1,4 +1,4 @@
-import numpy as np
+from torch_1k import backend
 from torch_1k.function import Function
 from torch_1k.tensor import Tensor, ensure_tensor
 from torch_1k.utils import np_sum_to
@@ -30,7 +30,8 @@ class Transpose(Function):
     #    self.dims = dims
 
     def forward(self, x):
-        y = np.transpose(x)
+        xp = backend.get_array_module(x)
+        y = xp.transpose(x)
         return y
 
     def backward(self, gy):
@@ -50,7 +51,8 @@ class _Unsqueeze(Function):
 
     def forward(self, x):
         self.x_shape = x.shape
-        y = np.expand_dims(x, dim=self.dim)
+        xp = backend.get_array_module(x)
+        y = xp.expand_dims(x, axis=self.dim)
         return y
 
 
@@ -78,7 +80,8 @@ class Broadcast(Function):
     def forward(self, x):
         # e.g. (3, 2) <- (3, 1)
         self.x_shape = x.shape
-        y = np.broadcast_to(x, self.shape)
+        xp = backend.get_array_module(x)
+        y = xp.broadcast_to(x, self.shape)
         return y
 
     def backward(self, gy):
@@ -122,7 +125,8 @@ class Sum(Function):
 
     def forward(self, x):
         self.x_shape = x.shape
-        y = np.sum(x, axis=self.axis, keepdims=self.keepdims)
+        xp = backend.get_array_module(x)
+        y = xp.sum(x, axis=self.axis, keepdims=self.keepdims)
         return y
 
     def backward(self, gy):

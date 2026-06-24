@@ -22,6 +22,9 @@ class DataLoader:
             self.index = np.random.permutation(self.data_size)
         else:
             self.index = np.arange(self.data_size)
+
+    def __iter__(self):
+        return self
     
     def mark_end(self):
         self.reset()

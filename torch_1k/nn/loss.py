@@ -1,7 +1,7 @@
 import numpy as np
 from torch_1k.function import Function
-from torch_1k import tensor
-from ..misc import mean
+from torch_1k.tensor import Tensor
+from torch_1k import backend
 
 
 class MSELoss(Function):
@@ -13,7 +13,8 @@ class MSELoss(Function):
         self.input = input
         self.target = target
         # 所有元素的mean
-        return mean((input - target) ** 2)
+        xp = backend.get_array_module(input)
+        return xp.mean((input - target) ** 2)
 
     def backward(self, grad_output):
         # 从上下文中取出正向传播保存的变量
@@ -21,4 +22,4 @@ class MSELoss(Function):
         # 计算梯度
         grad_input = (2.0 / np.prod(input.shape)) * (input - target)
         # 返回输入的梯度，target的梯度为None
-        return grad_input * grad_output
+        return Tensor(grad_input) * grad_output

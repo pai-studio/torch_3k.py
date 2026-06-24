@@ -1,6 +1,4 @@
-import numpy as np
 from torch_1k.function import Function
-from torch_1k import tensor
 from .pad import pad
 
 

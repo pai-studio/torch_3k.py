@@ -1,4 +1,4 @@
-import numpy as np
+from torch_1k import backend
 from torch_1k.function import Function
 
 
@@ -8,7 +8,8 @@ class ReLU(Function):
         super().__init__(self, *args, **kwargs)
 
     def forward(self, x):
-        y = np.maximum(x, 0.0)
+        xp = backend.get_array_module(x)
+        y = xp.maximum(x, 0.0)
         return y
 
     def backward(self, gy):
@@ -18,5 +19,5 @@ class ReLU(Function):
         return gx
 
 
-def relu(x)
+def relu(x):
     return ReLU()(x)

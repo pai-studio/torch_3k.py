@@ -5,9 +5,10 @@ from .settings import log_settings, runtime_settings
 from .functional import *
 from .tensor import (
     Tensor, no_grad, allclose, rand, randn, randint,
-    register_ops
+    zeros, ones, tensor, register_ops
 )
 from .misc import *
+from . import cuda
 
 from .version import __version__
 

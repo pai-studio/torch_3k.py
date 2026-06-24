@@ -1,10 +1,7 @@
-import numpy as np
+from torch_1k import backend
 
 def ensure_ndarray(data):
-    # np.isscalar is also OK
-    if isinstance(data, np.ndarray):
-        return data
-    return np.array(data)
+    return backend.ensure_array(data)
 
 
 def np_sum_to(x, shape):
@@ -13,49 +10,18 @@ def np_sum_to(x, shape):
         shape为目标shape
         根据目标shape确定是否keepdims
     '''
-    # e.g. shape(2, 3) -> shape(1, 3)
-    # e.g. shape(2, 3) -> shape(2, 1)
-    # e.g. shape(3,) -> shape()
-    # e.g. shape(3, 3,) -> shape(3, )
-    # e.g. shape(3, 5,) -> shape(5, ) not allowed
-    # 不同维度时，sum前的所有低位必须对齐
     if x.shape == shape:
         return x
 
-    if len(x.shape) == len(shape):
-        has_less_dims = False
-    elif len(x.shape)-1 == len(shape):
-        has_less_dims = True
-    else:
+    xp = backend.get_array_module(x)
+    ndim = len(shape)
+    lead = x.ndim - ndim
+    if lead < 0:
         raise Exception(f'not-allowed: `np_sum_to` {x.shape} -> {shape}')
 
-    # print(f' `np_sum_to` {x.shape} -> {shape}')
-    num_dif_shapes = 0
-    pos_dif_shapes = -1
-    #for ii in range(len(x.shape)):
-    for ii, i_dim in enumerate(range(-1, -len(x.shape)-1, -1)):
-        found = False
-        if has_less_dims:
-            # if i_dim >= len(shape):
-            if ii >= len(shape):
-                # 之前的dim都相同，但x多了1维
-                found = True
-            elif x.shape[i_dim] != shape[i_dim]:
-                # 之前的dim都相同，本dim发现不同
-                # 本身就少1维，必须都相同，
-                raise Exception(f'not-allowed: `np_sum_to` {x.shape} -> {shape}')
-        else:
-            if x.shape[i_dim] != shape[i_dim]:
-                # 之前的dim都相同，本dim发现不同
-                assert shape[i_dim] == 1, f'{i_dim=} of {shape} must be 1'
-                # print(f'{i_dim=}, {x.shape[i_dim], shape[i_dim]=}')
-                found = True
-
-        if found:
-            pos_dif_shapes = i_dim
-            num_dif_shapes += 1
-
-    # print(f'{num_dif_shapes, pos_dif_shapes=}')
-    assert num_dif_shapes == 1, f'SumTo: BadShape: current shape:{x.shape}, target: {shape=}'
-    # axis = pos_dif_shapes
-    return np.sum(x, axis=pos_dif_shapes, keepdims=not has_less_dims)
+    lead_axis = tuple(range(lead))
+    axis = tuple(i + lead for i, sx in enumerate(shape) if sx == 1)
+    y = xp.sum(x, axis=lead_axis + axis, keepdims=True)
+    if lead > 0:
+        y = xp.squeeze(y, axis=lead_axis)
+    return y

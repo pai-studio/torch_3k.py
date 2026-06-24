@@ -1,5 +1,6 @@
 import weakref
 from .parameter import Parameter
+from .. import backend
 from ..settings import Config, train_model, eval_model
 
 
@@ -10,9 +11,22 @@ class Module:
 
     def train(self):
         train_model()
+        return self
 
     def eval(self):
         eval_model()
+        return self
+
+    def to(self, device):
+        for name in self._parameters:
+            obj = self.__dict__[name]
+            if isinstance(obj, Module):
+                obj.to(device)
+            elif isinstance(obj, Parameter):
+                obj.data = backend.to_device(obj.data, device)
+                if obj.grad is not None:
+                    obj.grad = obj.grad.to(device)
+        return self
 
     def __setattr__(self, name, value):
         if isinstance(value, (Parameter, Module)):
@@ -41,5 +55,5 @@ class Module:
                 yield obj
 
     def zero_grad(self):
-        for parameter in self.self.parameters():
+        for parameter in self.parameters():
             parameter.zero_grad()

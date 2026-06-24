@@ -1,5 +1,6 @@
 import numpy as np
 import weakref
+from . import backend
 from .log import log_function_call
 from .settings import log_settings, runtime_settings, Config
 
@@ -13,8 +14,15 @@ class Function:
         self.generation = None
 
     def __call__(self, *inputs):
-        from . import tensor
-        inputs = [tensor.ensure_tensor(input) for input in inputs]
+        from .tensor import Tensor, ensure_tensor
+        inputs = [ensure_tensor(input) for input in inputs]
+        data_devices = {input.device for input in inputs if input.data.shape != ()}
+        if len(data_devices) > 1:
+            raise ValueError(f'all non-scalar inputs must be on the same device: {data_devices}')
+        if data_devices == {'cuda'}:
+            for input in inputs:
+                if input.device == 'cpu' and input.data.shape == ():
+                    input.data = backend.to_device(input.data, 'cuda')
         xs = [input.data for input in inputs]
         ys = self.forward(*xs)
         if not isinstance(ys, tuple):
@@ -22,7 +30,7 @@ class Function:
 
         # `inputs` 仅仅在反向传播时才需要，不反向传播时，不用保留
         # outputs = [tensor.Tensor(y) for y in ys]
-        outputs = [tensor.Tensor(y) for y in ys]
+        outputs = [Tensor(y) for y in ys]
         if Config.enable_backprop:
             # 更新`代`, 为所有输入代的最大值
             self.generation = max([input.generation for input in inputs])
@@ -43,4 +51,3 @@ class Function:
 
     def backward(self, gy):
         raise NotImplementedError()
-

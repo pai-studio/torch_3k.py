@@ -1,4 +1,4 @@
-import numpy as np
+from torch_1k import backend
 from torch_1k.function import Function
 
 
@@ -33,7 +33,8 @@ class Pad(Function):
             n = (self.index_or_slices.stop - start)//step
         '''
         # x.shape 要和self.shape做self.index_or_slices后的大小已知
-        y = self.value * np.ones(self.shape)
+        xp = backend.get_array_module(x)
+        y = self.value * xp.ones(self.shape)
         y[self.index_or_slices] = x
         return y
 

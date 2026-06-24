@@ -1,6 +1,12 @@
-import numpy as np
+from torch_1k import backend
 from ..function import Function
 from .matrix import sum_to
+
+
+def _adjust_grad_shape(gx, shape):
+    if gx.shape != shape:
+        return sum_to(gx, shape)
+    return gx
 
 
 # Square
@@ -22,7 +28,8 @@ def square(x):
 class Exp(Function):
 
     def forward(self, x):
-        return np.exp(x)
+        xp = backend.get_array_module(x)
+        return xp.exp(x)
 
     def backward(self, gy):
         # 为了计算高阶导数, 要求grad也为Tensor类型
@@ -76,10 +83,13 @@ def add(x1, x2):
 # Sub
 class Sub(Function):
     def forward(self, x1, x2):
+        self.x1_shape, self.x2_shape = x1.shape, x2.shape
         return x1 - x2
 
     def backward(self, gy):
-        return gy, -gy
+        gx1 = _adjust_grad_shape(gy, self.x1_shape)
+        gx2 = _adjust_grad_shape(-gy, self.x2_shape)
+        return gx1, gx2
 
 def sub(x1, x2):
     return Sub()(x1, x2)
@@ -92,11 +102,14 @@ def rsub(x1, x2):
 # Mul
 class Mul(Function):
     def forward(self, x1, x2):
+        self.x1_shape, self.x2_shape = x1.shape, x2.shape
         return x1 * x2
 
     def backward(self, gy):
         x1, x2 = self.inputs[0], self.inputs[1]
-        return x2*gy, x1*gy
+        gx1 = _adjust_grad_shape(x2*gy, self.x1_shape)
+        gx2 = _adjust_grad_shape(x1*gy, self.x2_shape)
+        return gx1, gx2
 
 def mul(x1, x2):
     return Mul()(x1, x2)
@@ -104,11 +117,14 @@ def mul(x1, x2):
 # Div
 class Div(Function):
     def forward(self, x1, x2):
+        self.x1_shape, self.x2_shape = x1.shape, x2.shape
         return x1 / x2
 
     def backward(self, gy):
         x1, x2 = self.inputs[0], self.inputs[1]
-        return gy/x2, -gy*x1 / x2 ** 2
+        gx1 = _adjust_grad_shape(gy/x2, self.x1_shape)
+        gx2 = _adjust_grad_shape(-gy*x1 / x2 ** 2, self.x2_shape)
+        return gx1, gx2
 
 def div(x1, x2):
     return Div()(x1, x2)
@@ -120,7 +136,7 @@ def rdiv(x1, x2):
 # Pow
 class Pow(Function):
     def __init__(self, c, *args, **kwargs):
-        super().__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.c = c
 
     def forward(self, x):
@@ -138,7 +154,8 @@ def pow(x, c):
 # Sin
 class Sin(Function):
     def forward(self, x):
-        return np.sin(x)
+        xp = backend.get_array_module(x)
+        return xp.sin(x)
 
     def backward(self, gy):
         x = self.inputs[0]
@@ -152,7 +169,8 @@ def sin(x):
 # Cos
 class Cos(Function):
     def forward(self, x):
-        return np.cos(x)
+        xp = backend.get_array_module(x)
+        return xp.cos(x)
 
     def backward(self, gy):
         x = self.inputs[0]
@@ -166,7 +184,8 @@ def cos(x):
 # Tanh
 class Tanh(Function):
     def forward(self, x):
-        return np.tanh(x)
+        xp = backend.get_array_module(x)
+        return xp.tanh(x)
 
     def backward(self, gy):
         # 1 - y**2
@@ -180,10 +199,12 @@ def tanh(x):
 # Sigmoid
 class Sigmoid(Function):
     def forward(self, x):
-        return 1/(1+np.exp(-x))
+        xp = backend.get_array_module(x)
+        return 1/(1+xp.exp(-x))
 
     def backward(self, gy):
-        return gy * np.exp(-x) / (1+np.exp(-x))**2
+        y = self.outputs[0]()
+        return gy * y * (1 - y)
 
 def sigmoid(x):
     return Sigmoid()(x)
