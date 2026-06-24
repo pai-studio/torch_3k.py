@@ -14,3 +14,13 @@ class SGD(Optimizer):
         # parameter.data -= self.lr * parameter.grad.data
         parameter.data = parameter.data - self.lr * parameter.grad.data
         #print(parameter)
+
+    def state_dict(self):
+        return {
+            'state': {},
+            'param_groups': [self._param_group(lr=self.lr)],
+        }
+
+    def load_state_dict(self, state_dict):
+        group = self._validate_state_dict(state_dict)
+        self.lr = group.get('lr', self.lr)

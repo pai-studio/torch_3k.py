@@ -468,7 +468,7 @@ for epoch in range(epochs):
 1. `Tensor` 还没有 `requires_grad` 概念；除 `torch.no_grad()` 外，运算默认都会建图。
 2. `DataLoader` 已支持 `__iter__`、`__len__` 和默认 Tensor collation；更完整的 sampler、多进程加载和 pinned memory 尚未实现。
 3. `MSELoss` 当前只返回 input 梯度，不返回 target 梯度；教学训练主路径通常不需要 target 梯度。
-4. 优化器还没有 `state_dict()` / `load_state_dict()`，因此完整 checkpoint 还不能保存 Adam 动量状态。
+4. 优化器已支持现有单参数组的 `state_dict()` / `load_state_dict()`，但还没有 PyTorch 完整的多 param group 体系。
 5. `nn` 层还缺少 Dropout、BatchNorm、更多初始化工具和更完整的容器模块。
 6. 规约与索引 API 仍只是常用子集，例如 `max`、`argmax` 的梯度语义和更多复杂索引尚未覆盖。
 7. dtype、device 和 CUDA 行为只覆盖当前示例与测试所需的核心路径，尚未达到 PyTorch 完整语义。
@@ -480,8 +480,8 @@ for epoch in range(epochs):
 如果继续推进到更接近 README 中的目标，建议按以下顺序做：
 
 1. 增加 `requires_grad` 语义，避免数据 Tensor 默认积累不必要梯度。
-2. 实现优化器 `state_dict()` / `load_state_dict()`，补齐完整 checkpoint 工作流。
-3. 增加 Dropout、BatchNorm 和初始化工具，让 `train()` / `eval()` 覆盖更多真实模块语义。
+2. 增加 Dropout、BatchNorm 和初始化工具，让 `train()` / `eval()` 覆盖更多真实模块语义。
+3. 继续扩展优化器到多 param group，并补齐更接近 PyTorch 的参数组超参数管理。
 4. 继续扩展 `DataLoader` 到 sampler、自定义 batch sampler 和更完整的 PyTorch 参数兼容。
 5. 补齐 `max`、`log_softmax`、更多 Tensor 方法和复杂索引。
 6. 明确 `MSELoss` 对 target 是否需要梯度；若追求 PyTorch 语义，返回 target 梯度。
