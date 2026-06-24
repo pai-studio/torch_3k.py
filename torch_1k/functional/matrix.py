@@ -89,6 +89,231 @@ def flatten(x, start_dim=0, end_dim=-1):
     return reshape(x, shape)
 
 
+def _normalize_repeat_sizes(repeats):
+    if len(repeats) == 1 and isinstance(repeats[0], (tuple, list)):
+        repeats = tuple(repeats[0])
+    if not repeats:
+        raise ValueError('repeat expects at least one repeat value')
+
+    repeats = tuple(int(repeat) for repeat in repeats)
+    if any(repeat < 0 for repeat in repeats):
+        raise ValueError('repeat expects non-negative repeat values')
+    return repeats
+
+
+class Repeat(Function):
+    def __init__(self, repeats):
+        self.repeats = _normalize_repeat_sizes(repeats)
+        self.input_shape = None
+        self.padded_shape = None
+
+    def forward(self, x):
+        if len(self.repeats) < x.ndim:
+            raise ValueError(
+                'repeat expects repeat values for every input dimension'
+            )
+
+        pad_dims = len(self.repeats) - x.ndim
+        self.input_shape = x.shape
+        self.padded_shape = (1,) * pad_dims + x.shape
+        xp = backend.get_array_module(x)
+        return xp.tile(x, self.repeats)
+
+    def backward(self, gy):
+        shape = []
+        for repeat_count, size in zip(self.repeats, self.padded_shape):
+            shape.extend((repeat_count, size))
+        gx = reshape(gy, tuple(shape))
+        axes = tuple(range(0, len(shape), 2))
+        gx = sum(gx, axis=axes)
+        return reshape(gx, self.input_shape)
+
+def repeat(input, *repeats):
+    return Repeat(repeats)(input)
+
+
+def _slice_along_dim(x, dim, start, end):
+    from .get_item import get_item
+
+    index = [slice(None)] * x.ndim
+    index[dim] = slice(start, end)
+    return get_item(x, tuple(index))
+
+
+def split(input, split_size_or_sections, dim=0):
+    x = ensure_tensor(input)
+    dim = _normalize_dim(dim, x.ndim)
+    dim_size = x.shape[dim]
+
+    if isinstance(split_size_or_sections, int):
+        split_size = int(split_size_or_sections)
+        if split_size <= 0:
+            raise ValueError('split expects a positive split size')
+        if dim_size == 0:
+            return (_slice_along_dim(x, dim, 0, 0),)
+        ranges = [
+            (start, min(start + split_size, dim_size))
+            for start in range(0, dim_size, split_size)
+        ]
+    else:
+        sections = tuple(int(size) for size in split_size_or_sections)
+        if any(size < 0 for size in sections):
+            raise ValueError('split expects non-negative section sizes')
+        if sum(sections) != dim_size:
+            raise ValueError('split section sizes must sum to input size')
+        ranges = []
+        start = 0
+        for size in sections:
+            ranges.append((start, start + size))
+            start += size
+
+    return tuple(_slice_along_dim(x, dim, start, end)
+                 for start, end in ranges)
+
+
+def chunk(input, chunks, dim=0):
+    chunks = int(chunks)
+    if chunks <= 0:
+        raise ValueError('chunk expects a positive chunk count')
+
+    x = ensure_tensor(input)
+    dim = _normalize_dim(dim, x.ndim)
+    dim_size = x.shape[dim]
+    if dim_size == 0:
+        return tuple(_slice_along_dim(x, dim, 0, 0) for _ in range(chunks))
+
+    split_size = (dim_size + chunks - 1) // chunks
+    return split(x, split_size, dim=dim)
+
+
+def _parse_einsum_equation(equation):
+    if not isinstance(equation, str):
+        raise TypeError('einsum equation must be a string')
+
+    equation = ''.join(equation.split())
+    if '...' in equation:
+        raise NotImplementedError('einsum ellipsis is not supported')
+
+    parts = equation.split('->')
+    if len(parts) > 2:
+        raise ValueError('einsum equation has too many arrows')
+
+    input_part = parts[0]
+    input_specs = tuple(input_part.split(','))
+    if input_specs == ('',) and input_part != '':
+        raise ValueError('einsum equation has invalid input specs')
+
+    for spec in input_specs:
+        if len(set(spec)) != len(spec):
+            raise NotImplementedError(
+                'einsum repeated labels in one input are not supported'
+            )
+
+    if len(parts) == 2:
+        output_spec = parts[1]
+        if ',' in output_spec:
+            raise ValueError('einsum output spec cannot contain commas')
+        if len(set(output_spec)) != len(output_spec):
+            raise ValueError('einsum output labels must be unique')
+        input_labels = set(''.join(input_specs))
+        if any(label not in input_labels for label in output_spec):
+            raise ValueError('einsum output labels must appear in inputs')
+    else:
+        label_counts = {}
+        for spec in input_specs:
+            for label in spec:
+                label_counts[label] = label_counts.get(label, 0) + 1
+        output_spec = ''.join(sorted(
+            label for label, count in label_counts.items() if count == 1
+        ))
+
+    return input_specs, output_spec
+
+
+def _restore_einsum_grad_shape(gx, spec, present_spec, target_shape, xp):
+    aligned_shape = []
+    present_axis = 0
+    for label in spec:
+        if label in present_spec:
+            aligned_shape.append(gx.shape[present_axis])
+            present_axis += 1
+        else:
+            aligned_shape.append(1)
+    gx = gx.reshape(tuple(aligned_shape))
+
+    for axis, (current_size, target_size) in enumerate(
+        zip(gx.shape, target_shape)
+    ):
+        if current_size == target_size:
+            continue
+        if target_size == 1:
+            gx = xp.sum(gx, axis=axis, keepdims=True)
+        elif current_size != 1:
+            raise ValueError(
+                'einsum backward cannot restore broadcasted gradient shape'
+            )
+
+    if gx.shape != target_shape:
+        gx = xp.broadcast_to(gx, target_shape)
+    return gx
+
+
+class Einsum(Function):
+    def __init__(self, equation):
+        self.input_specs, self.output_spec = _parse_einsum_equation(equation)
+        self.forward_equation = f"{','.join(self.input_specs)}->{self.output_spec}"
+        self.input_shapes = None
+
+    def forward(self, *xs):
+        if len(xs) != len(self.input_specs):
+            raise ValueError(
+                f'einsum expected {len(self.input_specs)} operands, '
+                f'got {len(xs)}'
+            )
+        self.input_shapes = [x.shape for x in xs]
+        xp = backend.get_array_module(*xs)
+        return xp.einsum(self.forward_equation, *xs)
+
+    def backward(self, gy):
+        grads = []
+        for i, (x, spec, shape) in enumerate(zip(
+            self.inputs, self.input_specs, self.input_shapes
+        )):
+            if not x.requires_grad:
+                grads.append(None)
+                continue
+
+            other_specs = []
+            other_arrays = []
+            for j, other in enumerate(self.inputs):
+                if i == j:
+                    continue
+                other_specs.append(self.input_specs[j])
+                other_arrays.append(other.data)
+
+            available = set(self.output_spec)
+            for other_spec in other_specs:
+                available.update(other_spec)
+
+            present_spec = ''.join(label for label in spec if label in available)
+            source_specs = [self.output_spec] + other_specs
+            source_arrays = [gy.data] + other_arrays
+            xp = backend.get_array_module(*source_arrays)
+            equation = f"{','.join(source_specs)}->{present_spec}"
+            gx = xp.einsum(equation, *source_arrays)
+            gx = _restore_einsum_grad_shape(
+                gx, spec, present_spec, shape, xp
+            )
+
+            grads.append(Tensor(gx))
+        return tuple(grads)
+
+def einsum(equation, *operands):
+    if not operands:
+        raise ValueError('einsum expects at least one operand')
+    return Einsum(equation)(*operands)
+
+
 # Transpose
 class Transpose(Function):
     def __init__(self, axes=None):

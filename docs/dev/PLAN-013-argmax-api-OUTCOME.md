@@ -63,7 +63,7 @@ python -m compileall -q torch_1k examples
 
 ## TODO / 未完成事项
 
-1. 尚未实现 `topk`、`argsort` 或排序相关 API。
+1. `topk` 已由 PLAN-024 补齐，`sort` / `argsort` 已由 PLAN-026 补齐。
 2. 尚未实现 `argmax` 的 tuple 维度语义。
 
 ## 复核结论

@@ -126,6 +126,15 @@ class Tensor:
     def flatten(self, start_dim=0, end_dim=-1):
         return F.flatten(self, start_dim=start_dim, end_dim=end_dim)
 
+    def repeat(self, *repeats):
+        return F.repeat(self, *repeats)
+
+    def split(self, split_size_or_sections, dim=0):
+        return F.split(self, split_size_or_sections, dim=dim)
+
+    def chunk(self, chunks, dim=0):
+        return F.chunk(self, chunks, dim=dim)
+
     def transpose(self, dim0=None, dim1=None):
         return F.transpose(self, dim0, dim1)
 
@@ -166,6 +175,15 @@ class Tensor:
     def argmax(self, dim=None, keepdim=False, axis=None, keepdims=None):
         return F.argmax(self, dim=dim, keepdim=keepdim, axis=axis,
                         keepdims=keepdims)
+
+    def topk(self, k, dim=None, largest=True, sorted=True):
+        return F.topk(self, k, dim=dim, largest=largest, sorted=sorted)
+
+    def sort(self, dim=-1, descending=False, stable=False):
+        return F.sort(self, dim=dim, descending=descending, stable=stable)
+
+    def argsort(self, dim=-1, descending=False, stable=False):
+        return F.argsort(self, dim=dim, descending=descending, stable=stable)
 
     def max(self, dim=None, keepdim=False, axis=None, keepdims=None):
         return F.max(self, dim=dim, keepdim=keepdim, axis=axis,

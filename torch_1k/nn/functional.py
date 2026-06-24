@@ -3,6 +3,7 @@ from torch_1k.tensor import Tensor
 from torch_1k.functional.numeric import (
     ReLU, relu, softmax, log_softmax,
 )
+from torch_1k.nn.loss import CrossEntropyLoss, MSELoss
 
 
 def dropout(input, p=0.5, training=True, inplace=False):
@@ -18,3 +19,11 @@ def dropout(input, p=0.5, training=True, inplace=False):
     mask = (xp.random.rand(*input.shape) < keep_prob).astype(input.data.dtype)
     mask = mask / keep_prob
     return input * Tensor(mask, requires_grad=False)
+
+
+def cross_entropy(input, target, reduction="mean"):
+    return CrossEntropyLoss(reduction=reduction)(input, target)
+
+
+def mse_loss(input, target, reduction="mean"):
+    return MSELoss(reduction=reduction)(input, target)

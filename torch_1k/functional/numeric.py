@@ -7,6 +7,8 @@ from .matrix import sum_to
 
 
 MaxResult = namedtuple('MaxResult', ['values', 'indices'])
+TopKResult = namedtuple('TopKResult', ['values', 'indices'])
+SortResult = namedtuple('SortResult', ['values', 'indices'])
 
 
 def _adjust_grad_shape(gx, shape):
@@ -346,6 +348,144 @@ def argmax(input, dim=None, keepdim=False, axis=None, keepdims=None):
     if axis is not None and keepdim:
         normalized_axis = axis if axis >= 0 else data.ndim + axis
         indices = xp.expand_dims(indices, axis=normalized_axis)
+    return Tensor(indices.astype('int64'), requires_grad=False)
+
+
+class TopK(Function):
+    def __init__(self, k, axis=-1, largest=True, sorted=True):
+        self.k = int(k)
+        self.axis = axis
+        self.largest = largest
+        self.sorted = sorted
+        self.normalized_axis = None
+        self.indices = None
+        self.x_shape = None
+
+    def forward(self, x):
+        if self.k < 0:
+            raise ValueError('topk expects k >= 0')
+        if x.ndim == 0:
+            raise ValueError('topk expects at least 1-dimensional input')
+
+        axis = self.axis if self.axis >= 0 else x.ndim + self.axis
+        if axis < 0 or axis >= x.ndim:
+            raise IndexError('topk dim is out of range')
+        if self.k > x.shape[axis]:
+            raise ValueError('topk k must not be larger than selected dim')
+
+        self.normalized_axis = axis
+        self.x_shape = x.shape
+        xp = backend.get_array_module(x)
+        order = xp.argsort(x, axis=axis)
+        if self.largest:
+            order = xp.flip(order, axis=axis)
+
+        index = [slice(None)] * x.ndim
+        index[axis] = slice(0, self.k)
+        indices = order[tuple(index)]
+        values = xp.take_along_axis(x, indices, axis=axis)
+
+        self.indices = indices.astype('int64')
+        return values
+
+    def backward(self, gy_values):
+        from torch_1k.tensor import Tensor
+
+        xp = backend.get_array_module(gy_values.data)
+        gx = xp.zeros(self.x_shape, dtype=gy_values.data.dtype)
+        xp.put_along_axis(gx, self.indices, gy_values.data,
+                          axis=self.normalized_axis)
+        return Tensor(gx)
+
+def topk(input, k, dim=None, largest=True, sorted=True):
+    from torch_1k.tensor import Tensor
+
+    axis = -1 if dim is None else dim
+    op = TopK(k, axis=axis, largest=largest, sorted=sorted)
+    values = op(input)
+    indices = Tensor(op.indices, requires_grad=False)
+    return TopKResult(values=values, indices=indices)
+
+
+class Sort(Function):
+    def __init__(self, axis=-1, descending=False, stable=False):
+        self.axis = axis
+        self.descending = descending
+        self.stable = stable
+        self.normalized_axis = None
+        self.indices = None
+        self.x_shape = None
+
+    def forward(self, x):
+        if not isinstance(self.axis, (int, np.integer)):
+            raise TypeError('sort dim must be an integer')
+
+        xp = backend.get_array_module(x)
+        self.x_shape = x.shape
+
+        if x.ndim == 0:
+            axis = 0 if self.axis in (-1, 0) else self.axis
+            if axis != 0:
+                raise IndexError('sort dim is out of range')
+            self.normalized_axis = None
+            self.indices = xp.array(0, dtype='int64')
+            return x.copy()
+
+        axis = self.axis if self.axis >= 0 else x.ndim + self.axis
+        if axis < 0 or axis >= x.ndim:
+            raise IndexError('sort dim is out of range')
+
+        self.normalized_axis = axis
+        order = xp.argsort(x, axis=axis)
+        if self.descending:
+            order = xp.flip(order, axis=axis)
+        values = xp.take_along_axis(x, order, axis=axis)
+
+        self.indices = order.astype('int64')
+        return values
+
+    def backward(self, gy_values):
+        from torch_1k.tensor import Tensor
+
+        if self.normalized_axis is None:
+            return gy_values
+
+        xp = backend.get_array_module(gy_values.data)
+        gx = xp.zeros(self.x_shape, dtype=gy_values.data.dtype)
+        xp.put_along_axis(gx, self.indices, gy_values.data,
+                          axis=self.normalized_axis)
+        return Tensor(gx)
+
+def sort(input, dim=-1, descending=False, stable=False):
+    from torch_1k.tensor import Tensor
+
+    op = Sort(axis=dim, descending=descending, stable=stable)
+    values = op(input)
+    indices = Tensor(op.indices, requires_grad=False)
+    return SortResult(values=values, indices=indices)
+
+
+def argsort(input, dim=-1, descending=False, stable=False):
+    from torch_1k.tensor import Tensor
+
+    data = input.data if isinstance(input, Tensor) else backend.ensure_array(input)
+    if not isinstance(dim, (int, np.integer)):
+        raise TypeError('argsort dim must be an integer')
+
+    xp = backend.get_array_module(data)
+    if data.ndim == 0:
+        axis = 0 if dim in (-1, 0) else dim
+        if axis != 0:
+            raise IndexError('argsort dim is out of range')
+        return Tensor(xp.array(0, dtype='int64'), requires_grad=False)
+
+    axis = dim if dim >= 0 else data.ndim + dim
+    if axis < 0 or axis >= data.ndim:
+        raise IndexError('argsort dim is out of range')
+
+    indices = xp.argsort(data, axis=axis)
+    if descending:
+        indices = xp.flip(indices, axis=axis)
     return Tensor(indices.astype('int64'), requires_grad=False)
 
 
