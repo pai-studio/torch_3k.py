@@ -208,3 +208,22 @@ class Sigmoid(Function):
 
 def sigmoid(x):
     return Sigmoid()(x)
+
+
+class Softmax(Function):
+    def __init__(self, axis=-1):
+        self.axis = axis
+
+    def forward(self, x):
+        xp = backend.get_array_module(x)
+        shifted = x - xp.max(x, axis=self.axis, keepdims=True)
+        exp_x = xp.exp(shifted)
+        return exp_x / xp.sum(exp_x, axis=self.axis, keepdims=True)
+
+    def backward(self, gy):
+        y = self.outputs[0]()
+        return y * (gy - (gy * y).sum(axis=self.axis, keepdims=True))
+
+def softmax(x, axis=-1, dim=None):
+    axis = dim if dim is not None else axis
+    return Softmax(axis)(x)

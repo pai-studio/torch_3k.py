@@ -71,6 +71,8 @@ class Tensor:
                     gxs = (gxs, )
 
                 for x, gx in zip(f.inputs, gxs):
+                    if gx is None:
+                        continue
                     if x.grad is None:
                         # in case of: y = x + x
                         x.grad = gx
@@ -94,14 +96,21 @@ class Tensor:
             shape = shape[0]
         return F.reshape(self, shape)
 
-    def transpose(self):
-        return F.transpose(self)
+    def transpose(self, dim0=None, dim1=None):
+        return F.transpose(self, dim0, dim1)
 
-    def sum(self):
-        return F.sum(self)
+    def permute(self, *dims):
+        if len(dims) == 1 and isinstance(dims[0], (tuple,list)):
+            dims = tuple(dims[0])
+        return F.permute(self, dims)
 
-    def mean(self):
-        return F.mean(self)
+    def sum(self, dim=None, axis=None, keepdims=False):
+        axis = dim if dim is not None else axis
+        return F.sum(self, axis=axis, keepdims=keepdims)
+
+    def mean(self, dim=None, axis=None, keepdims=False):
+        axis = dim if dim is not None else axis
+        return F.mean(self, axis=axis, keepdims=keepdims)
 
     def renamed(self, name):
         self.name = name
@@ -235,6 +244,7 @@ def register_ops():
     Tensor.__rtruediv__ = F.rdiv
 
     Tensor.__pow__ = F.pow
+    Tensor.__matmul__ = F.matmul
     Tensor.__getitem__ = get_item
 
 

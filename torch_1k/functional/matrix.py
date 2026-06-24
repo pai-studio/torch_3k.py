@@ -25,21 +25,34 @@ def reshape(x, shape):
 
 # Transpose
 class Transpose(Function):
-
-    #def __init__(self, *dims):
-    #    self.dims = dims
+    def __init__(self, axes=None):
+        self.axes = axes
 
     def forward(self, x):
         xp = backend.get_array_module(x)
-        y = xp.transpose(x)
+        y = xp.transpose(x, self.axes)
         return y
 
     def backward(self, gy):
-        gx = transpose(gy) # 反向传播，恢复原始输入的shape
-        return gx
+        if self.axes is None:
+            return transpose(gy)
+        inv_axes = [0] * len(self.axes)
+        for i, axis in enumerate(self.axes):
+            inv_axes[axis] = i
+        return permute(gy, tuple(inv_axes))
 
-def transpose(x):
-    return Transpose()(x)
+def transpose(x, dim0=None, dim1=None):
+    if dim0 is None and dim1 is None:
+        return Transpose()(x)
+    ndim = x.ndim
+    dim0 = dim0 if dim0 >= 0 else ndim + dim0
+    dim1 = dim1 if dim1 >= 0 else ndim + dim1
+    axes = list(range(ndim))
+    axes[dim0], axes[dim1] = axes[dim1], axes[dim0]
+    return Transpose(tuple(axes))(x)
+
+def permute(x, axes):
+    return Transpose(tuple(axes))(x)
 
 
 # Unsqueeze: future
@@ -60,13 +73,21 @@ class _Unsqueeze(Function):
 class MatMul(Function):
 
     def forward(self, x, W):
-        y = x.dot(W)
+        xp = backend.get_array_module(x, W)
+        y = xp.matmul(x, W)
+        self.x_shape = x.shape
+        self.W_shape = W.shape
         return y
 
     def backward(self, gy):
         x, W = self.inputs
-        gx = matmul(gy, W.T)
-        gW = matmul(x.T, gy)
+        gx = matmul(gy, W.transpose(-1, -2))
+        if len(self.W_shape) == 2 and len(self.x_shape) > 2:
+            x2 = reshape(x, (-1, self.x_shape[-1]))
+            gy2 = reshape(gy, (-1, gy.shape[-1]))
+            gW = matmul(x2.T, gy2)
+        else:
+            gW = matmul(x.transpose(-1, -2), gy)
         return gx, gW
 
 def matmul(x, W):
@@ -130,18 +151,30 @@ class Sum(Function):
         return y
 
     def backward(self, gy):
-        if self.axis is not None or self.keepdims:
-            assert 0, 'TODO'
-        gx = broadcast_to(gy, self.x_shape)
-        return gx
+        if self.axis is None:
+            return broadcast_to(gy, self.x_shape)
+
+        axes = self.axis if isinstance(self.axis, tuple) else (self.axis,)
+        axes = tuple(axis if axis >= 0 else len(self.x_shape) + axis for axis in axes)
+        if not self.keepdims:
+            shape = list(gy.shape)
+            for axis in sorted(axes):
+                shape.insert(axis, 1)
+            gy = reshape(gy, tuple(shape))
+        return broadcast_to(gy, self.x_shape)
 
 def sum(x, axis=None, keepdims=False):
     return Sum(axis=axis, keepdims=keepdims)(x)
 
 def mean(x, axis=None, keepdims=False):
-    if axis is not None or keepdims:
-        assert 0, 'TODO'
-    return sum(x, axis=axis, keepdims=keepdims) / x.data.size
+    if axis is None:
+        count = x.data.size
+    else:
+        axes = axis if isinstance(axis, tuple) else (axis,)
+        count = 1
+        for ax in axes:
+            count *= x.shape[ax]
+    return sum(x, axis=axis, keepdims=keepdims) / count
 
 def linear(x, W, b=None):
     t = matmul(x, W)
