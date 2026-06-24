@@ -138,6 +138,11 @@ class Sum(Function):
 def sum(x, axis=None, keepdims=False):
     return Sum(axis=axis, keepdims=keepdims)(x)
 
+def mean(x, axis=None, keepdims=False):
+    if axis is not None or keepdims:
+        assert 0, 'TODO'
+    return sum(x, axis=axis, keepdims=keepdims) / x.data.size
+
 def linear(x, W, b=None):
     t = matmul(x, W)
     if b is None:

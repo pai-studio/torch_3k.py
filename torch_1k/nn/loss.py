@@ -23,3 +23,26 @@ class MSELoss(Function):
         grad_input = (2.0 / np.prod(input.shape)) * (input - target)
         # 返回输入的梯度，target的梯度为None
         return Tensor(grad_input) * grad_output
+
+
+class CrossEntropyLoss(Function):
+    def forward(self, input, target):
+        xp = backend.get_array_module(input)
+        target = target.astype("int64")
+        self.target = target
+
+        shifted = input - xp.max(input, axis=1, keepdims=True)
+        exp_logits = xp.exp(shifted)
+        self.probs = exp_logits / xp.sum(exp_logits, axis=1, keepdims=True)
+
+        batch_index = xp.arange(input.shape[0])
+        losses = -xp.log(self.probs[batch_index, target])
+        return xp.mean(losses)
+
+    def backward(self, grad_output):
+        xp = backend.get_array_module(self.probs)
+        grad = self.probs.copy()
+        batch_index = xp.arange(self.target.shape[0])
+        grad[batch_index, self.target] -= 1
+        grad = grad / self.target.shape[0]
+        return Tensor(grad) * grad_output

@@ -43,7 +43,8 @@ class Tensor:
 
         if self.grad is None:
             # self.grad = np.ones_like(self.data)
-            self.grad = Tensor(np.ones_like(self.data))
+            xp = backend.get_array_module(self.data)
+            self.grad = Tensor(xp.ones_like(self.data))
 
         funcs = []
         set_funcs = set()
@@ -99,6 +100,9 @@ class Tensor:
     def sum(self):
         return F.sum(self)
 
+    def mean(self):
+        return F.mean(self)
+
     def renamed(self, name):
         self.name = name
         return self
@@ -115,6 +119,14 @@ class Tensor:
 
     def detach(self):
         return Tensor(self.data, name=self.name, log_enabled=self.log_enabled)
+
+    def float(self):
+        return Tensor(self.data.astype('float32'), name=self.name,
+                      log_enabled=self.log_enabled)
+
+    def long(self):
+        return Tensor(self.data.astype('int64'), name=self.name,
+                      log_enabled=self.log_enabled)
 
     def cpu(self):
         return self.to('cpu')
@@ -204,6 +216,10 @@ class Tensor:
             f', shape={self.shape}, grad={self.grad})'
         ).replace('\n', '\n' + ' '*8)
 
+    def __eq__(self, other):
+        other = ensure_tensor(other)
+        return Tensor(self.data == other.data)
+
 
 def register_ops():
     Tensor.__neg__ = F.neg
@@ -258,3 +274,7 @@ def ones(*shape, device=None):
 
 def tensor(data, device=None, dtype=None):
     return Tensor(data, device=device, dtype=dtype)
+
+float32 = np.float32
+float64 = np.float64
+long = np.int64

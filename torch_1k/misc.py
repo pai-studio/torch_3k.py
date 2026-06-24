@@ -24,3 +24,8 @@ def normal(mean=0, std=1.0, size=None, device=None):
 
 def mean(x):
     return F.sum(x)/np.prod(x.shape)
+
+def argmax(input, dim=None):
+    data = input.data if isinstance(input, Tensor) else backend.ensure_array(input)
+    xp = backend.get_array_module(data)
+    return Tensor(xp.argmax(data, axis=dim))
