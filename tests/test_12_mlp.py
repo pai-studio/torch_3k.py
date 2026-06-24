@@ -23,7 +23,7 @@ class XORMLP(nn.Module):
 
 
 def test_cross_entropy_backward_shape():
-    logits = torch.tensor([[2.0, 0.0], [0.0, 2.0]])
+    logits = torch.tensor([[2.0, 0.0], [0.0, 2.0]], requires_grad=True)
     target = torch.tensor([0, 1])
     loss = nn.CrossEntropyLoss()(logits, target)
 

@@ -47,7 +47,7 @@ class Optimizer:
     def _state_tensor(self, value):
         if isinstance(value, Tensor):
             value = value.data
-        return Tensor(value.copy())
+        return Tensor(value.copy(), requires_grad=False)
 
     def _state_array(self, value, parameter):
         if isinstance(value, Tensor):

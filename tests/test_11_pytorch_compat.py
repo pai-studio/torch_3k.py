@@ -19,8 +19,8 @@ def test_pytorch_compatible_device_api_cpu():
 
 
 def test_broadcast_grad_to_scalar():
-    x = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
-    b = torch.tensor(2.0)
+    x = torch.tensor([[1.0, 2.0], [3.0, 4.0]], requires_grad=True)
+    b = torch.tensor(2.0, requires_grad=True)
 
     y = ((x + b) * b).sum()
     y.backward()
@@ -33,7 +33,7 @@ def test_cuda_tensor_basic_if_available():
     if not torch.cuda.is_available():
         return
 
-    x = torch.tensor([1.0, 2.0, 3.0], device="cuda")
+    x = torch.tensor([1.0, 2.0, 3.0], device="cuda", requires_grad=True)
     y = (x * x).sum()
     y.backward()
 

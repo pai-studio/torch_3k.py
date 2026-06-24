@@ -82,7 +82,7 @@ class Module:
             if isinstance(obj, Module):
                 state.update(obj.state_dict(prefix=f'{key}.'))
             else:
-                state[key] = Tensor(obj.data.copy())
+                state[key] = Tensor(obj.data.copy(), requires_grad=False)
         return state
 
     def load_state_dict(self, state_dict, strict=True, prefix=''):

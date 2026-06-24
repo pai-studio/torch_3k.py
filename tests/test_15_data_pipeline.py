@@ -11,8 +11,8 @@ from torch_1k.utils.data import DataLoader, TensorDataset
 
 
 def test_stack_backward_to_inputs():
-    x = torch.tensor([1.0, 2.0])
-    y = torch.tensor([3.0, 4.0])
+    x = torch.tensor([1.0, 2.0], requires_grad=True)
+    y = torch.tensor([3.0, 4.0], requires_grad=True)
 
     z = torch.stack((x, y), dim=0)
     loss = z.sum()

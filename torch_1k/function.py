@@ -30,8 +30,12 @@ class Function:
 
         # `inputs` 仅仅在反向传播时才需要，不反向传播时，不用保留
         # outputs = [tensor.Tensor(y) for y in ys]
-        outputs = [Tensor(y) for y in ys]
-        if Config.enable_backprop:
+        requires_grad = (
+            Config.enable_backprop
+            and any(input.requires_grad for input in inputs)
+        )
+        outputs = [Tensor(y, requires_grad=requires_grad) for y in ys]
+        if requires_grad:
             # 更新`代`, 为所有输入代的最大值
             self.generation = max([input.generation for input in inputs])
             for output in outputs:

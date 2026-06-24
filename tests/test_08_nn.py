@@ -24,7 +24,8 @@ def test_nn_sum():
     y.backward()
     print(f'{x=}')
     print(f'{y=}')
-    assert allclose(y.creator.inputs[0].grad, [1,1])
+    assert y.requires_grad is False
+    assert y.creator is None
 
     x = Tensor(np.array([1,2]))
     y = F.sum(x)
