@@ -1,2 +1,2 @@
-from .dataset import Dataset
-from .data_loader import DataLoader
+from .dataset import Dataset, TensorDataset
+from .data_loader import DataLoader, default_collate

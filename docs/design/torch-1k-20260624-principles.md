@@ -382,19 +382,17 @@ parameter.data = parameter.data - lr * parameter.grad.data
 features, labels
 ```
 
-其中二者都是从 batch 样本拆出来的 Python list。当前实现缺少 `__iter__`，因此还不是完整 Python iterator；如果要支持：
+早期实现中二者都是从 batch 样本拆出来的 Python list。PLAN-006 后，`DataLoader` 支持标准迭代协议、`__len__` 和默认 batch collation；当数据集样本由 `Tensor` 组成时，batch 会自动通过 `torch.stack` 合并为 batched `Tensor`。典型用法为：
 
 ```python
-for x, y in loader:
+dataset = TensorDataset(x, y)
+loader = DataLoader(dataset, batch_size=32, shuffle=True)
+
+for batch_x, batch_y in loader:
     ...
 ```
 
-需要补充：
-
-```python
-def __iter__(self):
-    return self
-```
+`TensorDataset.__getitem__` 与 PyTorch 一样返回 tuple，因此单输入数据集也会返回单元素 tuple。
 
 ## 18. 一个完整训练闭环
 
@@ -439,7 +437,7 @@ for epoch in range(epochs):
 | `nn.Linear` | `torch_1k.nn.Linear` | 支持线性层，权重布局不同 |
 | `nn.MSELoss` | `torch_1k.nn.MSELoss` | 支持 input 梯度 |
 | `optim.SGD` | `torch_1k.optim.SGD` | 支持基础 SGD |
-| `DataLoader` | `torch_1k.utils.data.DataLoader` | 有雏形，未完整迭代器化 |
+| `DataLoader` | `torch_1k.utils.data.DataLoader` | 支持迭代、batch、shuffle、drop_last 和默认 Tensor collation |
 
 ## 20. 关键设计取舍
 
@@ -475,7 +473,7 @@ for epoch in range(epochs):
 6. `Tensor.randn` 类方法当前返回 `np.zeros(shape)`，不是随机正态分布。
 7. 二元算子中只有 `Add` 明确处理广播后的梯度形状还原，`Mul`、`Div` 等还需要补齐。
 8. `Sum.backward` 只完整支持 `axis=None` 且 `keepdims=False` 的主路径；带 axis 或 keepdims 的情况还未实现。
-9. `DataLoader` 缺少 `__iter__`，批数据也没有自动堆叠成 `Tensor` 或 NumPy 数组。
+9. `DataLoader` 已支持 `__iter__` 和默认 Tensor collation；更完整的 sampler、多进程加载和 pinned memory 尚未实现。
 10. `Module.eval()` 会关闭 autograd，这和 PyTorch 的 `eval()` 语义不同。
 
 这些边界不影响本项目作为“千行级 PyTorch 核心机制教学实现”的价值，但如果目标升级到更高兼容性，应优先修复。
@@ -490,7 +488,7 @@ for epoch in range(epochs):
 4. 明确 `MSELoss` 对 target 是否需要梯度；若追求 PyTorch 语义，返回 target 梯度。
 5. 完成 `MomentumSGD` 或删除未完成暴露点，再按 README 实现 Adam。
 6. 补齐 `ReLU`、`log`、`softmax` 等常用函数及对应测试。
-7. 让 `DataLoader` 支持标准迭代协议，并决定 batch 返回 list、NumPy 数组还是 `Tensor`。
+7. 继续扩展 `DataLoader` 到 sampler、自定义 batch sampler 和更完整的 PyTorch 参数兼容。
 8. 分离 `eval()` 与 `no_grad()` 的语义，向 PyTorch 行为靠拢。
 
 ## 23. 总结

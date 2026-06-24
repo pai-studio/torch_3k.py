@@ -55,6 +55,50 @@ def permute(x, axes):
     return Transpose(tuple(axes))(x)
 
 
+class Stack(Function):
+    def __init__(self, axis=0):
+        self.axis = axis
+        self.normalized_axis = None
+        self.input_count = None
+
+    def forward(self, *xs):
+        if not xs:
+            raise ValueError('stack expects a non-empty Tensor sequence')
+        first_shape = xs[0].shape
+        for x in xs:
+            if x.shape != first_shape:
+                raise ValueError('stack expects each tensor to be equal size')
+
+        rank = len(first_shape)
+        axis = self.axis if self.axis >= 0 else rank + 1 + self.axis
+        if axis < 0 or axis > rank:
+            raise IndexError(
+                f'Dimension out of range: expected to be in range of '
+                f'[-{rank + 1}, {rank}], but got {self.axis}'
+            )
+
+        self.normalized_axis = axis
+        self.input_count = len(xs)
+        xp = backend.get_array_module(*xs)
+        return xp.stack(xs, axis=axis)
+
+    def backward(self, gy):
+        from .get_item import get_item
+
+        outputs = []
+        for i in range(self.input_count):
+            index = [slice(None)] * gy.ndim
+            index[self.normalized_axis] = i
+            outputs.append(get_item(gy, tuple(index)))
+        return tuple(outputs)
+
+def stack(tensors, dim=0):
+    tensors = tuple(tensors)
+    if not tensors:
+        raise ValueError('stack expects a non-empty Tensor sequence')
+    return Stack(dim)(*tensors)
+
+
 # Unsqueeze: future
 class _Unsqueeze(Function):
     # input: 输入的张量。

@@ -13,3 +13,6 @@ from . import cuda
 from .version import __version__
 
 register_ops()
+
+# 兼容 `torch.utils.data.DataLoader` 形式的访问。
+from .utils import data
