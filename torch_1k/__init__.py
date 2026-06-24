@@ -5,7 +5,7 @@ from .settings import log_settings, runtime_settings
 from .functional import *
 from .tensor import (
     Tensor, no_grad, allclose, rand, randn, randint,
-    zeros, ones, tensor, register_ops
+    zeros, ones, tensor, float32, float64, long, register_ops
 )
 from .misc import *
 from . import cuda

@@ -26,8 +26,6 @@ def using_config(name, value):
 
 def train_model():
     Config.train = True
-    Config.enable_backprop = True
 
 def eval_model():
     Config.train = False
-    Config.enable_backprop = False

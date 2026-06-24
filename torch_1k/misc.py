@@ -1,4 +1,5 @@
 import numpy as np
+import pickle
 from .tensor import Tensor
 from . import functional as F
 from . import backend
@@ -29,3 +30,11 @@ def argmax(input, dim=None):
     data = input.data if isinstance(input, Tensor) else backend.ensure_array(input)
     xp = backend.get_array_module(data)
     return Tensor(xp.argmax(data, axis=dim))
+
+def save(obj, f):
+    with open(f, 'wb') as file:
+        pickle.dump(obj, file)
+
+def load(f):
+    with open(f, 'rb') as file:
+        return pickle.load(file)

@@ -1,5 +1,4 @@
 import numpy as np
-from . import utils
 from . import backend
 from .log import log_function_call
 from .settings import log_settings, runtime_settings, using_config
