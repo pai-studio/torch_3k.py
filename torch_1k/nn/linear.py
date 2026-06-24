@@ -13,6 +13,8 @@ class Linear(Module):
         self.weight = Parameter(np.random.randn(self.in_features,
                                                 self.out_features)*np.sqrt(1/self.in_features),
                                 name='W')
+        self.weight._fan_in = self.in_features
+        self.weight._fan_out = self.out_features
         if bias is True:
             self.bias = Parameter(np.zeros(self.out_features), name='b')
         else:
@@ -20,4 +22,3 @@ class Linear(Module):
 
     def forward(self, x):
         return linear(x, self.weight, self.bias)
-

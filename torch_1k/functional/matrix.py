@@ -22,6 +22,72 @@ def reshape(x, shape):
         return ensure_tensor(x)
     return Reshape(shape)(x)
 
+def view(x, shape):
+    return reshape(x, shape)
+
+
+def _normalize_dim(dim, ndim, allow_insert=False):
+    upper = ndim if allow_insert else ndim - 1
+    lower = -ndim - 1 if allow_insert else -ndim
+    if dim < lower or dim > upper:
+        raise IndexError(
+            f'Dimension out of range: expected to be in range of '
+            f'[{lower}, {upper}], but got {dim}'
+        )
+    if dim < 0:
+        dim += ndim + 1 if allow_insert else ndim
+    return dim
+
+
+def unsqueeze(x, dim):
+    x = ensure_tensor(x)
+    dim = _normalize_dim(dim, x.ndim, allow_insert=True)
+    shape = list(x.shape)
+    shape.insert(dim, 1)
+    return reshape(x, tuple(shape))
+
+
+def squeeze(x, dim=None, axis=None):
+    x = ensure_tensor(x)
+    dim = axis if dim is None else dim
+    if dim is None:
+        shape = tuple(size for size in x.shape if size != 1)
+        return reshape(x, shape)
+
+    if isinstance(dim, (tuple, list)):
+        dims = [_normalize_dim(d, x.ndim) for d in dim]
+        dim_set = set(dims)
+        shape = [
+            size for i, size in enumerate(x.shape)
+            if not (i in dim_set and size == 1)
+        ]
+        return reshape(x, tuple(shape))
+
+    dim = _normalize_dim(dim, x.ndim)
+    if x.shape[dim] != 1:
+        return ensure_tensor(x)
+    shape = list(x.shape)
+    shape.pop(dim)
+    return reshape(x, tuple(shape))
+
+
+def flatten(x, start_dim=0, end_dim=-1):
+    x = ensure_tensor(x)
+    ndim = x.ndim
+    if ndim == 0:
+        return reshape(x, (1,))
+
+    start = _normalize_dim(start_dim, ndim)
+    end = _normalize_dim(end_dim, ndim)
+    if start > end:
+        raise ValueError('flatten expects start_dim <= end_dim')
+
+    flat = 1
+    for size in x.shape[start:end + 1]:
+        flat *= size
+    shape = tuple(x.shape[:start] + (flat,) + x.shape[end + 1:])
+    return reshape(x, shape)
+
 
 # Transpose
 class Transpose(Function):
@@ -99,18 +165,60 @@ def stack(tensors, dim=0):
     return Stack(dim)(*tensors)
 
 
-# Unsqueeze: future
-class _Unsqueeze(Function):
-    # input: 输入的张量。
-    # dim: 要插入维度的位置，范围可以是 [-input.dim()-1, input.dim()]。
-    def __init__(self, dim):
-        self.dim = dim
+class Cat(Function):
+    def __init__(self, axis=0):
+        self.axis = axis
+        self.normalized_axis = None
+        self.sizes = None
+        self.input_count = None
 
-    def forward(self, x):
-        self.x_shape = x.shape
-        xp = backend.get_array_module(x)
-        y = xp.expand_dims(x, axis=self.dim)
-        return y
+    def forward(self, *xs):
+        if not xs:
+            raise ValueError('cat expects a non-empty Tensor sequence')
+        ndim = xs[0].ndim
+        if ndim == 0:
+            raise ValueError('cat expects at least 1-dimensional tensors')
+        axis = _normalize_dim(self.axis, ndim)
+        base_shape = xs[0].shape
+        sizes = []
+        for x in xs:
+            if x.ndim != ndim:
+                raise ValueError('cat expects tensors to have the same number of dimensions')
+            for dim, (actual, expected) in enumerate(zip(x.shape, base_shape)):
+                if dim != axis and actual != expected:
+                    raise ValueError('cat expects tensor shapes to match except in concat dim')
+            sizes.append(x.shape[axis])
+
+        self.normalized_axis = axis
+        self.sizes = sizes
+        self.input_count = len(xs)
+        xp = backend.get_array_module(*xs)
+        return xp.concatenate(xs, axis=axis)
+
+    def backward(self, gy):
+        from .get_item import get_item
+
+        outputs = []
+        start = 0
+        for size in self.sizes:
+            index = [slice(None)] * gy.ndim
+            index[self.normalized_axis] = slice(start, start + size)
+            outputs.append(get_item(gy, tuple(index)))
+            start += size
+        return tuple(outputs)
+
+def cat(tensors, dim=0, axis=None):
+    tensors = tuple(tensors)
+    if not tensors:
+        raise ValueError('cat expects a non-empty Tensor sequence')
+    axis = dim if axis is None else axis
+    return Cat(axis)(*tensors)
+
+def concat(tensors, dim=0, axis=None):
+    return cat(tensors, dim=dim, axis=axis)
+
+def concatenate(tensors, dim=0, axis=None):
+    return cat(tensors, dim=dim, axis=axis)
 
 
 # MatMul 

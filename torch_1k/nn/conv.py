@@ -90,6 +90,8 @@ class Conv2d(Module):
             np.random.randn(out_channels, in_channels, kh, kw) * scale,
             name='W'
         )
+        self.weight._fan_in = in_channels * kh * kw
+        self.weight._fan_out = out_channels * kh * kw
         self.bias = Parameter(np.zeros(out_channels), name='b') if bias else None
         self.stride = stride
         self.padding = padding

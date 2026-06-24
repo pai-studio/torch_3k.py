@@ -9,6 +9,7 @@ class Module:
 
     def __init__(self):
         self._parameters = []
+        self._buffers = []
         self.training = True
 
     def train(self, mode=True):
@@ -35,14 +36,39 @@ class Module:
                 obj.data = backend.to_device(obj.data, device)
                 if obj.grad is not None:
                     obj.grad = obj.grad.to(device)
+        for name in self._buffers:
+            obj = self.__dict__[name]
+            obj.data = backend.to_device(obj.data, device)
+            if obj.grad is not None:
+                obj.grad = obj.grad.to(device)
         return self
 
     def __setattr__(self, name, value):
+        parameters = self.__dict__.get('_parameters')
+        buffers = self.__dict__.get('_buffers')
         if isinstance(value, (Parameter, Module)):
-            names = self.__dict__.get('_parameters')
-            if names is not None and name not in names:
-                names.append(name)
+            if parameters is not None and name not in parameters:
+                parameters.append(name)
+            if buffers is not None and name in buffers:
+                buffers.remove(name)
+        elif isinstance(value, Tensor):
+            if buffers is not None and name not in buffers:
+                buffers.append(name)
+            if parameters is not None and name in parameters:
+                parameters.remove(name)
+        else:
+            if parameters is not None and name in parameters:
+                parameters.remove(name)
+            if buffers is not None and name in buffers:
+                buffers.remove(name)
         super().__setattr__(name, value)
+
+    def register_buffer(self, name, tensor):
+        if not isinstance(tensor, Tensor):
+            tensor = Tensor(tensor, requires_grad=False)
+        tensor.requires_grad = False
+        setattr(self, name, tensor)
+        return tensor
 
     def __call__(self, *inputs):
         outputs = self.forward(*inputs)
@@ -70,6 +96,15 @@ class Module:
             else:
                 yield f'{prefix}{name}', obj
 
+    def named_buffers(self, prefix=''):
+        for name in self._buffers:
+            yield f'{prefix}{name}', self.__dict__[name]
+        for name in self._parameters:
+            obj = self.__dict__[name]
+            if isinstance(obj, Module):
+                child_prefix = f'{prefix}{name}.'
+                yield from obj.named_buffers(child_prefix)
+
     def zero_grad(self):
         for parameter in self.parameters():
             parameter.zero_grad()
@@ -83,20 +118,24 @@ class Module:
                 state.update(obj.state_dict(prefix=f'{key}.'))
             else:
                 state[key] = Tensor(obj.data.copy(), requires_grad=False)
+        for name in self._buffers:
+            obj = self.__dict__[name]
+            state[f'{prefix}{name}'] = Tensor(obj.data.copy(), requires_grad=False)
         return state
 
     def load_state_dict(self, state_dict, strict=True, prefix=''):
         expected = dict(self.named_parameters(prefix))
+        expected.update(dict(self.named_buffers(prefix)))
         missing = []
-        for key, parameter in expected.items():
+        for key, tensor in expected.items():
             if key not in state_dict:
                 missing.append(key)
                 continue
             value = state_dict[key]
             if isinstance(value, Tensor):
                 value = value.data
-            data = backend.to_device(value, parameter.device)
-            parameter.data = data.copy()
+            data = backend.to_device(value, tensor.device)
+            tensor.data = data.copy()
 
         unexpected = [
             key for key in state_dict

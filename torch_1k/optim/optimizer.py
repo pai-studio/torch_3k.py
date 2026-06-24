@@ -4,9 +4,11 @@ from torch_1k.tensor import Tensor
 
 class Optimizer:
 
-    def __init__(self, parameters):
-        self.parameters = [item for item in parameters]
-        # print([item for item in self.parameters])
+    def __init__(self, parameters, defaults=None):
+        self.defaults = defaults or {}
+        self.parameters = []
+        self.param_groups = []
+        self._init_param_groups(parameters)
 
     def zero_grad(self):
         for parameter in self.parameters:
@@ -16,13 +18,40 @@ class Optimizer:
 
     def step(self):
         # print(f'{self.parameters=}')
-        for parameter in self.parameters:
-            # print(parameter.grad)
-            if parameter.grad is not None:
-                self.update_one(parameter)
+        for group in self.param_groups:
+            for parameter in group['params']:
+                # print(parameter.grad)
+                if parameter.grad is not None:
+                    self.update_one(parameter, group)
 
-    def update_one(self, parameter):
+    def update_one(self, parameter, group):
         raise NotImplementedError()
+
+    def _init_param_groups(self, parameters):
+        if isinstance(parameters, dict):
+            groups = [parameters]
+        else:
+            groups = list(parameters)
+        if groups and isinstance(groups[0], dict):
+            for group in groups:
+                self.add_param_group(group)
+        else:
+            self.add_param_group({'params': groups})
+
+    def _param_list(self, params):
+        if isinstance(params, Tensor):
+            return [params]
+        return [parameter for parameter in params]
+
+    def add_param_group(self, group):
+        params = self._param_list(group['params'])
+        options = dict(self.defaults)
+        for key, value in group.items():
+            if key != 'params':
+                options[key] = value
+        options['params'] = params
+        self.param_groups.append(options)
+        self.parameters.extend(params)
 
     def _param_indices(self):
         return {
@@ -30,19 +59,38 @@ class Optimizer:
             for index, parameter in enumerate(self.parameters)
         }
 
-    def _param_group(self, **options):
-        group = {'params': list(range(len(self.parameters)))}
-        group.update(options)
-        return group
+    def _state_param_groups(self):
+        indices = self._param_indices()
+        groups = []
+        for group in self.param_groups:
+            state_group = {
+                key: value for key, value in group.items()
+                if key != 'params'
+            }
+            state_group['params'] = [indices[id(p)] for p in group['params']]
+            groups.append(state_group)
+        return groups
 
     def _validate_state_dict(self, state_dict):
-        param_groups = state_dict.get('param_groups', [])
-        if len(param_groups) != 1:
-            raise ValueError('expected exactly one optimizer param group')
-        group = param_groups[0]
-        if len(group.get('params', [])) != len(self.parameters):
-            raise ValueError('loaded state dict has a different number of parameters')
-        return group
+        loaded_groups = state_dict.get('param_groups', [])
+        if len(loaded_groups) != len(self.param_groups):
+            raise ValueError('loaded state dict has a different number of param groups')
+        for loaded_group, group in zip(loaded_groups, self.param_groups):
+            if len(loaded_group.get('params', [])) != len(group['params']):
+                raise ValueError('loaded state dict has a different number of parameters')
+        return loaded_groups
+
+    def _load_param_groups(self, state_dict):
+        loaded_groups = self._validate_state_dict(state_dict)
+        for group, loaded_group in zip(self.param_groups, loaded_groups):
+            for key, value in loaded_group.items():
+                if key != 'params':
+                    group[key] = value
+        self._refresh_attributes_from_first_group()
+        return loaded_groups
+
+    def _refresh_attributes_from_first_group(self):
+        pass
 
     def _state_tensor(self, value):
         if isinstance(value, Tensor):
@@ -57,8 +105,8 @@ class Optimizer:
     def state_dict(self):
         return {
             'state': {},
-            'param_groups': [self._param_group()],
+            'param_groups': self._state_param_groups(),
         }
 
     def load_state_dict(self, state_dict):
-        self._validate_state_dict(state_dict)
+        self._load_param_groups(state_dict)

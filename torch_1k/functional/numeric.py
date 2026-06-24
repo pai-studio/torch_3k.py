@@ -331,6 +331,24 @@ def max(input, dim=None, keepdim=False, axis=None, keepdims=None):
     return MaxResult(values=values, indices=_max_indices(input, axis, keepdim))
 
 
+def argmax(input, dim=None, keepdim=False, axis=None, keepdims=None):
+    from torch_1k.tensor import Tensor
+
+    axis = dim if dim is not None else axis
+    if keepdims is not None:
+        keepdim = keepdims
+    if axis is not None and not isinstance(axis, (int, np.integer)):
+        raise TypeError('argmax only supports a single integer dim')
+
+    data = input.data if isinstance(input, Tensor) else backend.ensure_array(input)
+    xp = backend.get_array_module(data)
+    indices = xp.argmax(data, axis=axis)
+    if axis is not None and keepdim:
+        normalized_axis = axis if axis >= 0 else data.ndim + axis
+        indices = xp.expand_dims(indices, axis=normalized_axis)
+    return Tensor(indices.astype('int64'), requires_grad=False)
+
+
 class Softmax(Function):
     def __init__(self, axis=-1):
         self.axis = axis

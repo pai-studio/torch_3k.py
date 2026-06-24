@@ -9,16 +9,7 @@ def manual_seed(seed):
     backend.seed(seed)
 
 def unsqueeze(input, dim):
-    if isinstance(input, Tensor):
-        ndim = input.ndim
-        dim = dim if dim >= 0 else ndim + 1 + dim
-        shape = list(input.shape)
-        shape.insert(dim, 1)
-        return F.reshape(input, tuple(shape))
-
-    data = backend.ensure_array(input)
-    xp = backend.get_array_module(data)
-    return Tensor(xp.expand_dims(data, axis=dim), requires_grad=False)
+    return F.unsqueeze(input, dim)
 
 def linspace(start, stop, steps, device=None, requires_grad=False):
     xp = backend.array_module_for_device(device)
@@ -33,10 +24,9 @@ def normal(mean=0, std=1.0, size=None, device=None, requires_grad=False):
 def mean(x):
     return F.sum(x)/np.prod(x.shape)
 
-def argmax(input, dim=None):
-    data = input.data if isinstance(input, Tensor) else backend.ensure_array(input)
-    xp = backend.get_array_module(data)
-    return Tensor(xp.argmax(data, axis=dim), requires_grad=False)
+def argmax(input, dim=None, keepdim=False, axis=None, keepdims=None):
+    return F.argmax(input, dim=dim, keepdim=keepdim, axis=axis,
+                    keepdims=keepdims)
 
 def save(obj, f):
     with open(f, 'wb') as file:

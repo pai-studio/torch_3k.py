@@ -112,6 +112,20 @@ class Tensor:
             shape = shape[0]
         return F.reshape(self, shape)
 
+    def view(self, *shape):
+        if len(shape) == 1 and isinstance(shape[0], (tuple,list)):
+            shape = shape[0]
+        return F.view(self, shape)
+
+    def unsqueeze(self, dim):
+        return F.unsqueeze(self, dim)
+
+    def squeeze(self, dim=None, axis=None):
+        return F.squeeze(self, dim=dim, axis=axis)
+
+    def flatten(self, start_dim=0, end_dim=-1):
+        return F.flatten(self, start_dim=start_dim, end_dim=end_dim)
+
     def transpose(self, dim0=None, dim1=None):
         return F.transpose(self, dim0, dim1)
 
@@ -148,6 +162,10 @@ class Tensor:
 
     def log_softmax(self, dim=None, axis=-1):
         return F.log_softmax(self, axis=axis, dim=dim)
+
+    def argmax(self, dim=None, keepdim=False, axis=None, keepdims=None):
+        return F.argmax(self, dim=dim, keepdim=keepdim, axis=axis,
+                        keepdims=keepdims)
 
     def max(self, dim=None, keepdim=False, axis=None, keepdims=None):
         return F.max(self, dim=dim, keepdim=keepdim, axis=axis,
@@ -319,15 +337,84 @@ def randn(*shape, device=None, requires_grad=False):
     xp = backend.array_module_for_device(device)
     return Tensor(xp.random.randn(*shape), requires_grad=requires_grad)
 
-def randint(*shape, device=None, requires_grad=False):
+def _normalize_size(size):
+    if isinstance(size, int):
+        return (size,)
+    return tuple(size)
+
+def arange(start, end=None, step=1, device=None, dtype=None, requires_grad=False):
+    if end is None:
+        start, end = 0, start
     xp = backend.array_module_for_device(device)
-    return Tensor(xp.random.randint(*shape), requires_grad=requires_grad)
+    return Tensor(
+        xp.arange(start, end, step, dtype=dtype),
+        requires_grad=requires_grad,
+    )
+
+def randint(low, high=None, size=None, device=None, dtype=None,
+            requires_grad=False):
+    if size is None and isinstance(high, (tuple, list)):
+        size = high
+        high = low
+        low = 0
+    elif high is None:
+        high = low
+        low = 0
+    if size is None:
+        raise ValueError('randint requires a size')
+    if dtype is None:
+        dtype = np.int64
+    xp = backend.array_module_for_device(device)
+    data = xp.random.randint(low, high, size=_normalize_size(size))
+    if dtype is not None:
+        data = data.astype(dtype)
+    return Tensor(data, requires_grad=requires_grad)
 
 def zeros(*shape, device=None, requires_grad=False):
     return Tensor.zeros(*shape, device=device, requires_grad=requires_grad)
 
 def ones(*shape, device=None, requires_grad=False):
     return Tensor.ones(*shape, device=device, requires_grad=requires_grad)
+
+def zeros_like(input, device=None, dtype=None, requires_grad=False):
+    data = input.data if isinstance(input, Tensor) else backend.ensure_array(input)
+    target_device = input.device if isinstance(input, Tensor) and device is None else device
+    target_dtype = data.dtype if dtype is None else dtype
+    xp = backend.get_array_module(data) if target_device is None else backend.array_module_for_device(target_device)
+    return Tensor(
+        xp.zeros(data.shape, dtype=target_dtype),
+        device=target_device,
+        requires_grad=requires_grad,
+    )
+
+def ones_like(input, device=None, dtype=None, requires_grad=False):
+    data = input.data if isinstance(input, Tensor) else backend.ensure_array(input)
+    target_device = input.device if isinstance(input, Tensor) and device is None else device
+    target_dtype = data.dtype if dtype is None else dtype
+    xp = backend.get_array_module(data) if target_device is None else backend.array_module_for_device(target_device)
+    return Tensor(
+        xp.ones(data.shape, dtype=target_dtype),
+        device=target_device,
+        requires_grad=requires_grad,
+    )
+
+def full(size, fill_value, device=None, dtype=None, requires_grad=False):
+    xp = backend.array_module_for_device(device)
+    return Tensor(
+        xp.full(_normalize_size(size), fill_value, dtype=dtype),
+        requires_grad=requires_grad,
+    )
+
+def full_like(input, fill_value, device=None, dtype=None, requires_grad=False):
+    data = input.data if isinstance(input, Tensor) else backend.ensure_array(input)
+    target_device = input.device if isinstance(input, Tensor) and device is None else device
+    target_dtype = data.dtype if dtype is None else dtype
+    xp = backend.get_array_module(data) if target_device is None else backend.array_module_for_device(target_device)
+    return Tensor(
+        xp.full(data.shape, fill_value, dtype=target_dtype),
+        device=target_device,
+        requires_grad=requires_grad,
+    )
 
 def tensor(data, device=None, dtype=None, requires_grad=False):
     return Tensor(data, device=device, dtype=dtype,

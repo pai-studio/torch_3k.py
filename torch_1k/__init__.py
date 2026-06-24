@@ -4,8 +4,9 @@ from .function import Function
 from .settings import log_settings, runtime_settings
 from .functional import *
 from .tensor import (
-    Tensor, no_grad, allclose, rand, randn, randint,
-    zeros, ones, tensor, float32, float64, long, register_ops
+    Tensor, no_grad, allclose, arange, full, full_like, rand, randn, randint,
+    ones, ones_like, tensor, zeros, zeros_like,
+    float32, float64, long, register_ops
 )
 from .misc import *
 from . import cuda

@@ -4,6 +4,7 @@ from numbers import Number
 
 from ...tensor import Tensor, tensor
 from ...functional import stack
+from .sampler import BatchSampler, RandomSampler, SequentialSampler
 
 
 def default_collate(batch):
@@ -30,33 +31,44 @@ class DataLoader:
     
     def __init__(
         self, dataset, batch_size=1, shuffle=False, drop_last=False,
-        collate_fn=None,
+        sampler=None, batch_sampler=None, collate_fn=None,
     ) -> None:
         '''
         drop_last: 如果设置为 True，在数据集大小不能整除 batch_size 时，丢弃最后一个不足一个批次的数据。
         '''
-        if batch_size <= 0:
+        if batch_sampler is not None:
+            if batch_size != 1 or shuffle or sampler is not None or drop_last:
+                raise ValueError(
+                    'batch_sampler is mutually exclusive with batch_size, '
+                    'shuffle, sampler, and drop_last'
+                )
+        elif batch_size <= 0:
             raise ValueError('batch_size should be a positive integer value')
+        if sampler is not None and shuffle:
+            raise ValueError('sampler is mutually exclusive with shuffle')
         self.dataset = dataset
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.drop_last = drop_last
         self.collate_fn = collate_fn or default_collate
-        
         self.data_size= len(dataset)
-        if self.drop_last:
-            self.max_iter = self.data_size // self.batch_size
+        if batch_sampler is not None:
+            self.sampler = None
+            self.batch_sampler = batch_sampler
         else:
-            self.max_iter = (self.data_size + self.batch_size - 1) // self.batch_size
+            if sampler is None:
+                sampler = RandomSampler(dataset) if shuffle else SequentialSampler(dataset)
+            self.sampler = sampler
+            self.batch_sampler = BatchSampler(
+                sampler, batch_size=batch_size, drop_last=drop_last
+            )
+        self.max_iter = len(self.batch_sampler)
         
         self.reset()
     
     def reset(self):
         self.iteration = 0
-        if self.shuffle:
-            self.index = np.random.permutation(self.data_size)
-        else:
-            self.index = np.arange(self.data_size)
+        self.batch_iter = iter(self.batch_sampler)
 
     def __iter__(self):
         self.reset()
@@ -70,10 +82,10 @@ class DataLoader:
         if self.iteration >= self.max_iter:
             self.reset()
             raise StopIteration
-            
-        i, batch_size = self.iteration, self.batch_size
-        batch_index = self.index[i*batch_size: (i+1)*batch_size]
-        if self.drop_last and len(batch_index) != batch_size:
+
+        try:
+            batch_index = next(self.batch_iter)
+        except StopIteration:
             self.reset()
             raise StopIteration
         
