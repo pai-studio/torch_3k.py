@@ -1,3 +1,5 @@
+import builtins
+
 from torch_1k import backend
 from torch_1k.function import Function
 from torch_1k.tensor import Tensor, ensure_tensor
@@ -159,7 +161,7 @@ def split(input, split_size_or_sections, dim=0):
         sections = tuple(int(size) for size in split_size_or_sections)
         if any(size < 0 for size in sections):
             raise ValueError('split expects non-negative section sizes')
-        if sum(sections) != dim_size:
+        if builtins.sum(sections) != dim_size:
             raise ValueError('split section sizes must sum to input size')
         ranges = []
         start = 0

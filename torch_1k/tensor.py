@@ -157,6 +157,18 @@ class Tensor:
     def log(self):
         return F.log(self)
 
+    def abs(self):
+        return F.abs(self)
+
+    def sqrt(self):
+        return F.sqrt(self)
+
+    def clamp(self, min=None, max=None):
+        return F.clamp(self, min=min, max=max)
+
+    def clip(self, min=None, max=None):
+        return F.clip(self, min=min, max=max)
+
     def relu(self):
         return F.relu(self)
 
@@ -178,6 +190,15 @@ class Tensor:
 
     def topk(self, k, dim=None, largest=True, sorted=True):
         return F.topk(self, k, dim=dim, largest=largest, sorted=sorted)
+
+    def masked_fill(self, mask, value):
+        return F.masked_fill(self, mask, value)
+
+    def index_select(self, dim, index):
+        return F.index_select(self, dim, index)
+
+    def gather(self, dim, index):
+        return F.gather(self, dim, index)
 
     def sort(self, dim=-1, descending=False, stable=False):
         return F.sort(self, dim=dim, descending=descending, stable=stable)
@@ -309,12 +330,19 @@ class Tensor:
         ).replace('\n', '\n' + ' '*8)
 
     def __eq__(self, other):
-        other = ensure_tensor(other)
-        return Tensor(self.data == other.data, requires_grad=False)
+        return F.eq(self, other)
+
+    def __bool__(self):
+        if self.data.size != 1:
+            raise ValueError(
+                'bool value of Tensor with more than one value is ambiguous'
+            )
+        return bool(self.item())
 
 
 def register_ops():
     Tensor.__neg__ = F.neg
+    Tensor.__abs__ = F.abs
 
     Tensor.__add__ = F.add
     Tensor.__radd__ = F.add
@@ -329,6 +357,13 @@ def register_ops():
     Tensor.__pow__ = F.pow
     Tensor.__matmul__ = F.matmul
     Tensor.__getitem__ = get_item
+
+    Tensor.__eq__ = F.eq
+    Tensor.__ne__ = F.ne
+    Tensor.__lt__ = F.lt
+    Tensor.__le__ = F.le
+    Tensor.__gt__ = F.gt
+    Tensor.__ge__ = F.ge
 
 
 def no_grad():

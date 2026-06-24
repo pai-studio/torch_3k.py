@@ -17,6 +17,79 @@ def _adjust_grad_shape(gx, shape):
     return gx
 
 
+def _normalize_axis(axis, ndim, name):
+    if not isinstance(axis, (int, np.integer)):
+        raise TypeError(f'{name} dim must be an integer')
+    axis = int(axis)
+    if axis < 0:
+        axis += ndim
+    if axis < 0 or axis >= ndim:
+        raise IndexError(f'{name} dim is out of range')
+    return axis
+
+
+def _ensure_integer_index(index, name):
+    if not np.issubdtype(index.dtype, np.integer):
+        raise TypeError(f'{name} index must be an integer tensor')
+    return index.astype('int64', copy=False)
+
+
+def _broadcast_index_selector(index_shape, axis, index, xp):
+    selector = []
+    ndim = len(index_shape)
+    for dim, size in enumerate(index_shape):
+        if dim == axis:
+            selector.append(index)
+            continue
+        shape = [1] * ndim
+        shape[dim] = size
+        selector.append(xp.arange(size).reshape(tuple(shape)))
+    return xp.broadcast_arrays(*selector)
+
+
+def _comparison(x1, x2, op):
+    from torch_1k.tensor import Tensor
+
+    if isinstance(x1, Tensor):
+        x1 = x1.data
+    else:
+        x1 = backend.ensure_array(x1)
+    if isinstance(x2, Tensor):
+        x2 = x2.data
+    else:
+        x2 = backend.ensure_array(x2)
+
+    xp = backend.get_array_module(x1, x2)
+    if xp is not np:
+        x1 = xp.asarray(x1)
+        x2 = xp.asarray(x2)
+    return Tensor(op(x1, x2), requires_grad=False)
+
+
+def eq(x1, x2):
+    return _comparison(x1, x2, lambda a, b: a == b)
+
+
+def ne(x1, x2):
+    return _comparison(x1, x2, lambda a, b: a != b)
+
+
+def lt(x1, x2):
+    return _comparison(x1, x2, lambda a, b: a < b)
+
+
+def le(x1, x2):
+    return _comparison(x1, x2, lambda a, b: a <= b)
+
+
+def gt(x1, x2):
+    return _comparison(x1, x2, lambda a, b: a > b)
+
+
+def ge(x1, x2):
+    return _comparison(x1, x2, lambda a, b: a >= b)
+
+
 # Square
 class Square(Function):
 
@@ -61,6 +134,71 @@ class Log(Function):
 
 def log(x):
     return Log()(x)
+
+
+class Abs(Function):
+    def forward(self, x):
+        xp = backend.get_array_module(x)
+        return xp.abs(x)
+
+    def backward(self, gy):
+        from torch_1k.tensor import Tensor
+
+        x = self.inputs[0]
+        xp = backend.get_array_module(x.data)
+        return gy * Tensor(xp.sign(x.data), requires_grad=False)
+
+def abs(x):
+    return Abs()(x)
+
+
+class Sqrt(Function):
+    def forward(self, x):
+        xp = backend.get_array_module(x)
+        return xp.sqrt(x)
+
+    def backward(self, gy):
+        x = self.inputs[0]
+        return gy * 0.5 / sqrt(x)
+
+def sqrt(x):
+    return Sqrt()(x)
+
+
+class Clamp(Function):
+    def __init__(self, min=None, max=None):
+        if min is None and max is None:
+            raise ValueError('clamp expects min or max')
+        self.min = min
+        self.max = max
+
+    def forward(self, x):
+        xp = backend.get_array_module(x)
+        y = x
+        if self.min is not None:
+            y = xp.maximum(y, self.min)
+        if self.max is not None:
+            y = xp.minimum(y, self.max)
+        return y
+
+    def backward(self, gy):
+        from torch_1k.tensor import Tensor
+
+        x = self.inputs[0]
+        xp = backend.get_array_module(x.data)
+        mask = xp.ones_like(x.data, dtype=bool)
+        if self.min is not None:
+            mask = mask & (x.data >= self.min)
+        if self.max is not None:
+            mask = mask & (x.data <= self.max)
+        return gy * Tensor(mask, requires_grad=False)
+
+def clamp(input, min=None, max=None):
+    return Clamp(min=min, max=max)(input)
+
+
+def clip(input, min=None, max=None):
+    return clamp(input, min=min, max=max)
 
 
 class ReLU(Function):
@@ -405,6 +543,116 @@ def topk(input, k, dim=None, largest=True, sorted=True):
     values = op(input)
     indices = Tensor(op.indices, requires_grad=False)
     return TopKResult(values=values, indices=indices)
+
+
+class Where(Function):
+    def forward(self, condition, x, other):
+        if condition.dtype != bool:
+            raise TypeError('where condition must be a bool tensor')
+
+        self.x_shape = x.shape
+        self.other_shape = other.shape
+        xp = backend.get_array_module(condition, x, other)
+        self.condition = condition.astype(bool, copy=False)
+        return xp.where(self.condition, x, other)
+
+    def backward(self, gy):
+        from torch_1k.tensor import Tensor
+
+        condition = self.condition
+        gx = Tensor(gy.data * condition, requires_grad=False)
+        gother = Tensor(gy.data * (~condition), requires_grad=False)
+        return (
+            None,
+            _adjust_grad_shape(gx, self.x_shape),
+            _adjust_grad_shape(gother, self.other_shape),
+        )
+
+def where(condition, input, other):
+    return Where()(condition, input, other)
+
+
+def masked_fill(input, mask, value):
+    from torch_1k.tensor import Tensor
+
+    return where(mask, Tensor(value, requires_grad=False), input)
+
+
+class IndexSelect(Function):
+    def __init__(self, axis):
+        self.axis = axis
+        self.normalized_axis = None
+        self.index = None
+        self.x_shape = None
+
+    def forward(self, x, index):
+        if x.ndim == 0:
+            raise ValueError('index_select expects at least 1-dimensional input')
+        if index.ndim != 1:
+            raise ValueError('index_select index must be 1-dimensional')
+
+        axis = _normalize_axis(self.axis, x.ndim, 'index_select')
+        index = _ensure_integer_index(index, 'index_select')
+
+        self.normalized_axis = axis
+        self.index = index
+        self.x_shape = x.shape
+        xp = backend.get_array_module(x, index)
+        return xp.take(x, index, axis=axis)
+
+    def backward(self, gy):
+        from torch_1k.tensor import Tensor
+
+        xp = backend.get_array_module(gy.data)
+        gx = xp.zeros(self.x_shape, dtype=gy.data.dtype)
+        selector = _broadcast_index_selector(
+            gy.shape, self.normalized_axis, self.index, xp
+        )
+        xp.add.at(gx, tuple(selector), gy.data)
+        return Tensor(gx), None
+
+def index_select(input, dim, index):
+    return IndexSelect(dim)(input, index)
+
+
+class Gather(Function):
+    def __init__(self, axis):
+        self.axis = axis
+        self.normalized_axis = None
+        self.index = None
+        self.x_shape = None
+
+    def forward(self, x, index):
+        if x.ndim == 0:
+            raise ValueError('gather expects at least 1-dimensional input')
+        if index.ndim != x.ndim:
+            raise ValueError('gather index must have the same rank as input')
+
+        axis = _normalize_axis(self.axis, x.ndim, 'gather')
+        index = _ensure_integer_index(index, 'gather')
+        for dim, size in enumerate(index.shape):
+            if dim != axis and size > x.shape[dim]:
+                raise ValueError('gather index shape is out of bounds')
+
+        self.normalized_axis = axis
+        self.index = index
+        self.x_shape = x.shape
+        xp = backend.get_array_module(x, index)
+        return xp.take_along_axis(x, index, axis=axis)
+
+    def backward(self, gy):
+        from torch_1k.tensor import Tensor
+
+        xp = backend.get_array_module(gy.data)
+        gx = xp.zeros(self.x_shape, dtype=gy.data.dtype)
+        selector = _broadcast_index_selector(
+            self.index.shape, self.normalized_axis, self.index, xp
+        )
+        xp.add.at(gx, tuple(selector), gy.data)
+        return Tensor(gx), None
+
+def gather(input, dim, index):
+    return Gather(dim)(input, index)
 
 
 class Sort(Function):
