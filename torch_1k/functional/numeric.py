@@ -254,3 +254,22 @@ class Softmax(Function):
 def softmax(x, axis=-1, dim=None):
     axis = dim if dim is not None else axis
     return Softmax(axis)(x)
+
+
+class LogSoftmax(Function):
+    def __init__(self, axis=-1):
+        self.axis = axis
+
+    def forward(self, x):
+        xp = backend.get_array_module(x)
+        shifted = x - xp.max(x, axis=self.axis, keepdims=True)
+        log_sum_exp = xp.log(xp.sum(xp.exp(shifted), axis=self.axis, keepdims=True))
+        return shifted - log_sum_exp
+
+    def backward(self, gy):
+        y = self.outputs[0]()
+        return gy - exp(y) * gy.sum(axis=self.axis, keepdims=True)
+
+def log_softmax(x, axis=-1, dim=None):
+    axis = dim if dim is not None else axis
+    return LogSoftmax(axis)(x)

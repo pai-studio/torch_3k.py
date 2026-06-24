@@ -1,6 +1,8 @@
 from torch_1k import backend
 from torch_1k.tensor import Tensor
-from torch_1k.functional.numeric import ReLU, relu
+from torch_1k.functional.numeric import (
+    ReLU, relu, softmax, log_softmax,
+)
 
 
 def dropout(input, p=0.5, training=True, inplace=False):

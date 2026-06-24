@@ -434,6 +434,7 @@ for epoch in range(epochs):
 | `nn.Parameter` | `torch_1k.nn.Parameter` | 继承 Tensor，默认 `requires_grad=True` |
 | `nn.Linear` | `torch_1k.nn.Linear` | 支持线性层，权重布局不同 |
 | `nn.Dropout` | `torch_1k.nn.Dropout` | 支持训练态随机置零和 eval 恒等映射 |
+| `nn.Softmax` / `nn.LogSoftmax` | `torch_1k.nn.Softmax` / `torch_1k.nn.LogSoftmax` | 支持指定 dim 的分类概率和对数概率 |
 | `nn.MSELoss` | `torch_1k.nn.MSELoss` | 支持 input 梯度 |
 | `optim.SGD` | `torch_1k.optim.SGD` | 支持基础 SGD |
 | `DataLoader` | `torch_1k.utils.data.DataLoader` | 支持迭代、batch、shuffle、drop_last 和默认 Tensor collation |
@@ -480,7 +481,7 @@ for epoch in range(epochs):
 1. 增加 Dropout、BatchNorm 和初始化工具，让 `train()` / `eval()` 覆盖更多真实模块语义。
 2. 继续扩展优化器到多 param group，并补齐更接近 PyTorch 的参数组超参数管理。
 3. 继续扩展 `DataLoader` 到 sampler、自定义 batch sampler 和更完整的 PyTorch 参数兼容。
-4. 补齐 `max`、`log_softmax`、更多 Tensor 方法和复杂索引。
+4. 补齐 `max`、更多 Tensor 方法和复杂索引。
 5. 明确 `MSELoss` 对 target 是否需要梯度；若追求 PyTorch 语义，返回 target 梯度。
 
 ## 23. 总结

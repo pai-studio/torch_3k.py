@@ -18,3 +18,21 @@ class Dropout(Module):
     def forward(self, x):
         return F.dropout(x, p=self.p, training=self.training,
                          inplace=self.inplace)
+
+
+class Softmax(Module):
+    def __init__(self, dim=None):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, x):
+        return F.softmax(x, dim=self.dim)
+
+
+class LogSoftmax(Module):
+    def __init__(self, dim=None):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, x):
+        return F.log_softmax(x, dim=self.dim)
