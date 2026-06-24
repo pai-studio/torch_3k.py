@@ -8,7 +8,7 @@ Implementing PyTorch's core basic functions within 1000 lines of code
 - [x] Tensor类：支持标量和Tensor相加
 - [x] Tensor类：支持不同维度下的广播
 - [x] 支持函数和复合函数的自动微分求导
-- [ ] 实现常用函数sin,cos,exp,log,relu,softmax等
+- [x] 实现常用函数sin,cos,exp,log,relu,softmax等
 - [x] 实现神经网络Module
 - [x] 实现Linear算子
 - [x] optimizer优化模块: 实现Adam优化算法

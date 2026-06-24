@@ -41,6 +41,33 @@ class Exp(Function):
 def exp(x):
     return Exp()(x)
 
+
+class Log(Function):
+    def forward(self, x):
+        xp = backend.get_array_module(x)
+        return xp.log(x)
+
+    def backward(self, gy):
+        x = self.inputs[0]
+        return gy / x
+
+def log(x):
+    return Log()(x)
+
+
+class ReLU(Function):
+    def forward(self, x):
+        xp = backend.get_array_module(x)
+        return xp.maximum(x, 0.0)
+
+    def backward(self, gy):
+        x = self.inputs[0]
+        return gy * (x.data > 0)
+
+def relu(x):
+    return ReLU()(x)
+
+
 # Neg
 class Neg(Function):
     def forward(self, x):

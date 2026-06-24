@@ -111,6 +111,21 @@ class Tensor:
         axis = dim if dim is not None else axis
         return F.mean(self, axis=axis, keepdims=keepdims)
 
+    def exp(self):
+        return F.exp(self)
+
+    def log(self):
+        return F.log(self)
+
+    def relu(self):
+        return F.relu(self)
+
+    def tanh(self):
+        return F.tanh(self)
+
+    def sigmoid(self):
+        return F.sigmoid(self)
+
     def renamed(self, name):
         self.name = name
         return self

@@ -463,18 +463,15 @@ for epoch in range(epochs):
 
 ## 21. 当前实现边界和风险
 
-以下是阅读源码时观察到的现状，不是设计目标：
+以下是当前实现仍然存在的边界，不是设计目标：
 
-1. `nn.functional.py` 中 `def relu(x)` 缺少冒号，直接导入该模块会语法错误；当前 `nn/__init__.py` 没有导入它，所以主路径暂时绕开了这个问题。
-2. `Sigmoid.backward` 使用了未定义变量 `x`，该算子当前反向不可用。
-3. `Module.zero_grad` 中写成了 `self.self.parameters()`，调用会失败；训练示例主要使用 `optimizer.zero_grad()`。
-4. `MomentumSGD` 构造函数参数名与内部使用不一致，且 `update_one` 仍是 `assert 0`。
-5. README 提到 Adam，但 `optim` 目前只导出 `Optimizer` 和 `SGD`。
-6. `Tensor.randn` 类方法当前返回 `np.zeros(shape)`，不是随机正态分布。
-7. 二元算子中只有 `Add` 明确处理广播后的梯度形状还原，`Mul`、`Div` 等还需要补齐。
-8. `Sum.backward` 只完整支持 `axis=None` 且 `keepdims=False` 的主路径；带 axis 或 keepdims 的情况还未实现。
-9. `DataLoader` 已支持 `__iter__` 和默认 Tensor collation；更完整的 sampler、多进程加载和 pinned memory 尚未实现。
-10. `Module.eval()` 会关闭 autograd，这和 PyTorch 的 `eval()` 语义不同。
+1. `Tensor` 还没有 `requires_grad` 概念；除 `torch.no_grad()` 外，运算默认都会建图。
+2. `DataLoader` 已支持 `__iter__`、`__len__` 和默认 Tensor collation；更完整的 sampler、多进程加载和 pinned memory 尚未实现。
+3. `MSELoss` 当前只返回 input 梯度，不返回 target 梯度；教学训练主路径通常不需要 target 梯度。
+4. 优化器还没有 `state_dict()` / `load_state_dict()`，因此完整 checkpoint 还不能保存 Adam 动量状态。
+5. `nn` 层还缺少 Dropout、BatchNorm、更多初始化工具和更完整的容器模块。
+6. 规约与索引 API 仍只是常用子集，例如 `max`、`argmax` 的梯度语义和更多复杂索引尚未覆盖。
+7. dtype、device 和 CUDA 行为只覆盖当前示例与测试所需的核心路径，尚未达到 PyTorch 完整语义。
 
 这些边界不影响本项目作为“千行级 PyTorch 核心机制教学实现”的价值，但如果目标升级到更高兼容性，应优先修复。
 
@@ -482,14 +479,12 @@ for epoch in range(epochs):
 
 如果继续推进到更接近 README 中的目标，建议按以下顺序做：
 
-1. 修复明显运行错误：`nn.functional.relu` 语法、`Sigmoid.backward`、`Module.zero_grad`、`Tensor.randn`。
-2. 补齐广播梯度：让 `Mul`、`Div`、`Sub` 等二元算子都对输入原始形状执行 `sum_to`。
-3. 完善 `sum(axis, keepdims)` 的反向传播。
-4. 明确 `MSELoss` 对 target 是否需要梯度；若追求 PyTorch 语义，返回 target 梯度。
-5. 完成 `MomentumSGD` 或删除未完成暴露点，再按 README 实现 Adam。
-6. 补齐 `ReLU`、`log`、`softmax` 等常用函数及对应测试。
-7. 继续扩展 `DataLoader` 到 sampler、自定义 batch sampler 和更完整的 PyTorch 参数兼容。
-8. 分离 `eval()` 与 `no_grad()` 的语义，向 PyTorch 行为靠拢。
+1. 增加 `requires_grad` 语义，避免数据 Tensor 默认积累不必要梯度。
+2. 实现优化器 `state_dict()` / `load_state_dict()`，补齐完整 checkpoint 工作流。
+3. 增加 Dropout、BatchNorm 和初始化工具，让 `train()` / `eval()` 覆盖更多真实模块语义。
+4. 继续扩展 `DataLoader` 到 sampler、自定义 batch sampler 和更完整的 PyTorch 参数兼容。
+5. 补齐 `max`、`log_softmax`、更多 Tensor 方法和复杂索引。
+6. 明确 `MSELoss` 对 target 是否需要梯度；若追求 PyTorch 语义，返回 target 梯度。
 
 ## 23. 总结
 
