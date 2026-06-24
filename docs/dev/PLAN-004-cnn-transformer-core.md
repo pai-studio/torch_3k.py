@@ -21,7 +21,7 @@
 1. 新增 `nn.Conv2d`，支持教学版 NCHW 输入、stride、padding。
 2. 新增 `nn.MaxPool2d`，支持教学版 2D 最大池化。
 3. 新增 `nn.Flatten`。
-4. 新增 PyTorch 兼容 CNN 分类示例，使用 28x28 本地合成数字样式数据，接口结构可直接迁移到真实 MNIST。
+4. 新增 PyTorch 兼容 CNN 分类示例，默认使用 28x28 本地合成数字样式数据；设置 `USE_REAL_MNIST=1` 时下载并训练真实 MNIST 小子集。
 
 ### Transformer
 
@@ -52,4 +52,4 @@
 
 ## 说明
 
-本阶段的 MNIST 示例使用本地合成的 28x28 数字样式数据，避免下载真实 MNIST 导致测试不稳定。目标是验证 CNN 训练链路和 PyTorch 兼容接口；真实 MNIST 数据接入可在后续单独补充 DataLoader/下载缓存策略。
+本阶段的 MNIST 示例默认使用本地合成的 28x28 数字样式数据，避免下载真实 MNIST 导致测试不稳定；同时提供 `USE_REAL_MNIST=1` 的真实 MNIST 小子集路径，下载文件缓存于 `downloads/mnist/`。

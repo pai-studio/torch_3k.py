@@ -8,11 +8,12 @@
    - 修复并导出 `MomentumSGD`。
    - 新增 `Adam`。
    - 新增 `AdamW`。
-2. CNN/MNIST-like：
+2. CNN/MNIST：
    - 新增 `nn.Conv2d`。
    - 新增 `nn.MaxPool2d`。
    - 新增 `nn.Flatten`。
    - 新增 `examples/example5_mnist_cnn_train_compare.py`。
+   - 默认使用本地 MNIST-like 数据，`USE_REAL_MNIST=1` 时下载并训练真实 MNIST 小子集。
 3. Transformer：
    - 新增 `nn.Embedding`。
    - 新增 `nn.LayerNorm`。
@@ -39,6 +40,8 @@
 ```bash
 python examples/example5_mnist_cnn_train_compare.py
 USE_TORCH_1K=0 python examples/example5_mnist_cnn_train_compare.py
+USE_REAL_MNIST=1 python examples/example5_mnist_cnn_train_compare.py
+USE_TORCH_1K=0 USE_REAL_MNIST=1 python examples/example5_mnist_cnn_train_compare.py
 python examples/example6_transformer_train_compare.py
 USE_TORCH_1K=0 python examples/example6_transformer_train_compare.py
 pytest -q tests/test_13_cnn_transformer.py
@@ -50,6 +53,8 @@ python -m compileall -q torch_1k examples
 
 - `torch_1k` CNN 示例：`accuracy=1.000000`
 - PyTorch CNN 示例：`accuracy=1.000000`
+- `torch_1k` 真实 MNIST 小子集示例：`accuracy=1.000000`
+- PyTorch 真实 MNIST 小子集示例：`accuracy=1.000000`
 - `torch_1k` Transformer 示例：`accuracy=1.000000`
 - PyTorch Transformer 示例：`accuracy=1.000000`
 - 新增测试：`3 passed`
@@ -58,7 +63,7 @@ python -m compileall -q torch_1k examples
 
 ## 说明
 
-MNIST 示例当前使用本地生成的 28x28 MNIST-like 数据，避免下载依赖影响可重复运行。模型和训练循环使用 PyTorch 风格接口，后续接入真实 MNIST 只需要替换数据加载部分。
+MNIST 示例默认使用本地生成的 28x28 MNIST-like 数据，避免下载依赖影响可重复运行；真实 MNIST 小子集路径已通过 `USE_REAL_MNIST=1` 验证。下载文件缓存于 `.gitignore` 已忽略的 `downloads/mnist/`。
 
 ## 代码规模
 

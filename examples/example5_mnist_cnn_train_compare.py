@@ -3,10 +3,16 @@
 The dataset is generated locally as 28x28 digit-like patterns, so the example
 has no download dependency. Replace make_dataset() with a real MNIST loader to
 train on MNIST without changing the model or training loop.
+
+Set USE_REAL_MNIST=1 to download and train on a tiny real MNIST subset without
+torchvision. Downloaded files are cached under downloads/mnist/.
 """
 
 import os
 import sys
+import gzip
+import struct
+import urllib.request
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +20,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 USE_TORCH_1K = os.getenv("USE_TORCH_1K", "1") != "0"
+USE_REAL_MNIST = os.getenv("USE_REAL_MNIST", "0") == "1"
 
 if USE_TORCH_1K:
     import torch_1k as torch
@@ -40,7 +47,7 @@ class SmallCNN(nn.Module):
         return self.net(x)
 
 
-def make_dataset(device):
+def make_synthetic_dataset(device):
     rng = np.random.RandomState(0)
     images = []
     labels = []
@@ -59,6 +66,61 @@ def make_dataset(device):
     x = torch.tensor(np.array(images)[:, None, :, :]).to(device)
     y = torch.tensor(np.array(labels)).long().to(device)
     return x, y
+
+
+def _download(url, path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        urllib.request.urlretrieve(url, path)
+
+
+def _read_idx_images(path):
+    with gzip.open(path, "rb") as f:
+        magic, count, rows, cols = struct.unpack(">IIII", f.read(16))
+        assert magic == 2051
+        data = np.frombuffer(f.read(), dtype=np.uint8)
+    return data.reshape(count, rows, cols)
+
+
+def _read_idx_labels(path):
+    with gzip.open(path, "rb") as f:
+        magic, count = struct.unpack(">II", f.read(8))
+        assert magic == 2049
+        data = np.frombuffer(f.read(), dtype=np.uint8)
+    return data
+
+
+def make_real_mnist_subset(device, samples_per_class=2):
+    base_url = "https://storage.googleapis.com/cvdf-datasets/mnist"
+    root = Path(__file__).resolve().parents[1] / "downloads" / "mnist"
+    images_path = root / "train-images-idx3-ubyte.gz"
+    labels_path = root / "train-labels-idx1-ubyte.gz"
+    _download(f"{base_url}/train-images-idx3-ubyte.gz", images_path)
+    _download(f"{base_url}/train-labels-idx1-ubyte.gz", labels_path)
+
+    images = _read_idx_images(images_path)
+    labels = _read_idx_labels(labels_path)
+    selected = []
+    counts = {i: 0 for i in range(10)}
+    for index, label in enumerate(labels):
+        label = int(label)
+        if counts[label] < samples_per_class:
+            selected.append(index)
+            counts[label] += 1
+        if all(count == samples_per_class for count in counts.values()):
+            break
+
+    x_np = images[selected].astype("float32") / 255.0
+    y_np = labels[selected].astype("int64")
+    x = torch.tensor(x_np[:, None, :, :]).to(device)
+    y = torch.tensor(y_np).long().to(device)
+    return x, y
+
+
+def make_dataset(device):
+    if USE_REAL_MNIST:
+        return make_real_mnist_subset(device)
+    return make_synthetic_dataset(device)
 
 
 def run(epochs=80, lr=0.03):
