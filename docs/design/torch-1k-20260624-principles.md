@@ -469,7 +469,7 @@ for epoch in range(epochs):
 2. `MSELoss` 当前只返回 input 梯度，不返回 target 梯度；教学训练主路径通常不需要 target 梯度。
 3. 优化器已支持现有单参数组的 `state_dict()` / `load_state_dict()`，但还没有 PyTorch 完整的多 param group 体系。
 4. `nn` 层还缺少 BatchNorm、更多初始化工具和更完整的容器模块。
-5. 规约与索引 API 仍只是常用子集，例如 `max`、`argmax` 的梯度语义和更多复杂索引尚未覆盖。
+5. 规约与索引 API 仍只是常用子集，例如 `argmax` 的梯度语义、多维 tuple 规约和更多复杂索引尚未覆盖。
 6. dtype、device 和 CUDA 行为只覆盖当前示例与测试所需的核心路径，尚未达到 PyTorch 完整语义。
 
 这些边界不影响本项目作为“千行级 PyTorch 核心机制教学实现”的价值，但如果目标升级到更高兼容性，应优先修复。
@@ -481,7 +481,7 @@ for epoch in range(epochs):
 1. 增加 Dropout、BatchNorm 和初始化工具，让 `train()` / `eval()` 覆盖更多真实模块语义。
 2. 继续扩展优化器到多 param group，并补齐更接近 PyTorch 的参数组超参数管理。
 3. 继续扩展 `DataLoader` 到 sampler、自定义 batch sampler 和更完整的 PyTorch 参数兼容。
-4. 补齐 `max`、更多 Tensor 方法和复杂索引。
+4. 补齐更多 Tensor 方法、tuple 规约和复杂索引。
 5. 明确 `MSELoss` 对 target 是否需要梯度；若追求 PyTorch 语义，返回 target 梯度。
 
 ## 23. 总结

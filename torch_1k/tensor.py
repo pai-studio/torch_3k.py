@@ -149,6 +149,10 @@ class Tensor:
     def log_softmax(self, dim=None, axis=-1):
         return F.log_softmax(self, axis=axis, dim=dim)
 
+    def max(self, dim=None, keepdim=False, axis=None, keepdims=None):
+        return F.max(self, dim=dim, keepdim=keepdim, axis=axis,
+                     keepdims=keepdims)
+
     def renamed(self, name):
         self.name = name
         return self

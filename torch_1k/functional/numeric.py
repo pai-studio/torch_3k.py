@@ -1,6 +1,12 @@
+import numpy as np
+from collections import namedtuple
+
 from torch_1k import backend
 from ..function import Function
 from .matrix import sum_to
+
+
+MaxResult = namedtuple('MaxResult', ['values', 'indices'])
 
 
 def _adjust_grad_shape(gx, shape):
@@ -235,6 +241,94 @@ class Sigmoid(Function):
 
 def sigmoid(x):
     return Sigmoid()(x)
+
+
+class Maximum(Function):
+    def forward(self, x1, x2):
+        self.x1_shape, self.x2_shape = x1.shape, x2.shape
+        xp = backend.get_array_module(x1, x2)
+        return xp.maximum(x1, x2)
+
+    def backward(self, gy):
+        from torch_1k.tensor import Tensor
+
+        x1, x2 = self.inputs
+        greater1 = x1.data > x2.data
+        greater2 = x2.data > x1.data
+        equal = x1.data == x2.data
+        gx1 = Tensor(gy.data * (greater1 + equal * 0.5))
+        gx2 = Tensor(gy.data * (greater2 + equal * 0.5))
+        return (
+            _adjust_grad_shape(gx1, self.x1_shape),
+            _adjust_grad_shape(gx2, self.x2_shape),
+        )
+
+def maximum(x1, x2):
+    return Maximum()(x1, x2)
+
+
+class Max(Function):
+    def __init__(self, axis=None, keepdims=False):
+        self.axis = axis
+        self.keepdims = keepdims
+        self.indices = None
+        self.normalized_axis = None
+
+    def forward(self, x):
+        xp = backend.get_array_module(x)
+        self.x_shape = x.shape
+        if self.axis is None:
+            self.normalized_axis = None
+            return xp.max(x, keepdims=self.keepdims)
+
+        axis = self.axis if self.axis >= 0 else x.ndim + self.axis
+        self.normalized_axis = axis
+        self.indices = xp.argmax(x, axis=axis)
+        return xp.max(x, axis=axis, keepdims=self.keepdims)
+
+    def backward(self, gy):
+        from torch_1k.tensor import Tensor
+
+        x = self.inputs[0]
+        xp = backend.get_array_module(x.data)
+        if self.normalized_axis is None:
+            y = self.outputs[0]().data
+            mask = x.data == y
+            count = xp.sum(mask)
+            return Tensor(gy.data * mask / count)
+
+        axis = self.normalized_axis
+        gy_data = gy.data
+        indices = self.indices
+        if not self.keepdims:
+            gy_data = xp.expand_dims(gy_data, axis=axis)
+        indices = xp.expand_dims(indices, axis=axis)
+        gx = xp.zeros_like(x.data)
+        xp.put_along_axis(gx, indices, gy_data, axis=axis)
+        return Tensor(gx)
+
+def _max_indices(x, axis, keepdims=False):
+    from torch_1k.tensor import Tensor
+
+    data = x.data if isinstance(x, Tensor) else backend.ensure_array(x)
+    xp = backend.get_array_module(data)
+    axis = axis if axis >= 0 else data.ndim + axis
+    indices = xp.argmax(data, axis=axis)
+    if keepdims:
+        indices = xp.expand_dims(indices, axis=axis)
+    return Tensor(indices.astype('int64'), requires_grad=False)
+
+def max(input, dim=None, keepdim=False, axis=None, keepdims=None):
+    if dim is not None and not isinstance(dim, (int, np.integer)):
+        return maximum(input, dim)
+
+    axis = dim if dim is not None else axis
+    if keepdims is not None:
+        keepdim = keepdims
+    values = Max(axis=axis, keepdims=keepdim)(input)
+    if axis is None:
+        return values
+    return MaxResult(values=values, indices=_max_indices(input, axis, keepdim))
 
 
 class Softmax(Function):
