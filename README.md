@@ -12,6 +12,7 @@ Implementing PyTorch's core basic functions within 1000 lines of code
 - [x] 实现常用函数sin,cos,exp,log,relu,softmax等
 - [x] 实现神经网络Module
 - [x] 实现Linear算子
+- [x] 实现Dropout训练/推理模式差异
 - [x] optimizer优化模块: 实现Adam优化算法
 - [ ] 实现MLP神经网络，把torch替换为`torch_1k`可以做普通的mnist分类
 

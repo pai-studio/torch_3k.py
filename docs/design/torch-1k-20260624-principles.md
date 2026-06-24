@@ -433,6 +433,7 @@ for epoch in range(epochs):
 | `nn.Module` | `torch_1k.nn.Module` | 支持参数收集和嵌套模块 |
 | `nn.Parameter` | `torch_1k.nn.Parameter` | 继承 Tensor，默认 `requires_grad=True` |
 | `nn.Linear` | `torch_1k.nn.Linear` | 支持线性层，权重布局不同 |
+| `nn.Dropout` | `torch_1k.nn.Dropout` | 支持训练态随机置零和 eval 恒等映射 |
 | `nn.MSELoss` | `torch_1k.nn.MSELoss` | 支持 input 梯度 |
 | `optim.SGD` | `torch_1k.optim.SGD` | 支持基础 SGD |
 | `DataLoader` | `torch_1k.utils.data.DataLoader` | 支持迭代、batch、shuffle、drop_last 和默认 Tensor collation |
@@ -466,7 +467,7 @@ for epoch in range(epochs):
 1. `DataLoader` 已支持 `__iter__`、`__len__` 和默认 Tensor collation；更完整的 sampler、多进程加载和 pinned memory 尚未实现。
 2. `MSELoss` 当前只返回 input 梯度，不返回 target 梯度；教学训练主路径通常不需要 target 梯度。
 3. 优化器已支持现有单参数组的 `state_dict()` / `load_state_dict()`，但还没有 PyTorch 完整的多 param group 体系。
-4. `nn` 层还缺少 Dropout、BatchNorm、更多初始化工具和更完整的容器模块。
+4. `nn` 层还缺少 BatchNorm、更多初始化工具和更完整的容器模块。
 5. 规约与索引 API 仍只是常用子集，例如 `max`、`argmax` 的梯度语义和更多复杂索引尚未覆盖。
 6. dtype、device 和 CUDA 行为只覆盖当前示例与测试所需的核心路径，尚未达到 PyTorch 完整语义。
 
