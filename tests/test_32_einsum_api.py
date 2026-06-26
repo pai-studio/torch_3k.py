@@ -99,6 +99,18 @@ def test_einsum_dot_product_scalar_backward():
 @pytest.mark.parametrize("equation,arrays", [
     ("ij,jk->ik", [_array((2, 3), 1.0), _array((3, 4), 2.0)]),
     ("bij,bjk->bik", [_array((2, 3, 4), 1.0), _array((2, 4, 5), 2.0)]),
+    ("...ij,jk->...ik", [_array((2, 3, 4), 1.0), _array((4, 5), 2.0)]),
+    ("...ij,...jk->...ik", [_array((2, 3, 4), 1.0), _array((2, 4, 5), 2.0)]),
+    ("...ij,...jk->...ik", [_array((1, 3, 4), 1.0), _array((2, 4, 5), 2.0)]),
+    ("...ij,jk", [_array((2, 3, 4), 1.0), _array((4, 5), 2.0)]),
+    ("...ij->...", [_array((2, 3, 4), 1.0)]),
+    ("...i->i", [_array((2, 3, 4), 1.0)]),
+    ("ii->i", [_array((3, 3), 1.0)]),
+    ("ii->", [_array((3, 3), 1.0)]),
+    ("ijj->i", [_array((2, 3, 3), 1.0)]),
+    ("ii,i->", [_array((3, 3), 1.0), _array((3,), 2.0)]),
+    ("...ii->...i", [_array((2, 3, 3), 1.0)]),
+    ("...ii->...", [_array((2, 3, 3), 1.0)]),
     ("i,i->", [_array((4,), 1.0), _array((4,), 2.0)]),
     ("i,j->ij", [_array((3,), 1.0), _array((4,), 2.0)]),
     ("ij->i", [_array((2, 3), 1.0)]),
@@ -117,10 +129,12 @@ def test_einsum_classic_torch_usages_match_pytorch(equation, arrays):
 def test_einsum_rejects_unsupported_equations():
     x = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
 
-    with pytest.raises(NotImplementedError):
-        torch.einsum("ii->i", x)
-    with pytest.raises(NotImplementedError):
-        torch.einsum("...ij->...i", x)
+    with pytest.raises(ValueError):
+        torch.einsum("i..j->ij", x)
+    with pytest.raises(ValueError):
+        torch.einsum("......ij->ij", x)
+    with pytest.raises(ValueError):
+        torch.einsum("ii->i", torch.tensor(np.ones((2, 3))))
 
 
 def test_einsum_cuda_if_available():
@@ -139,3 +153,39 @@ def test_einsum_cuda_if_available():
     assert x.grad.device == "cuda"
     assert w.grad.device == "cuda"
     assert np.allclose(y.cpu().numpy(), x.cpu().numpy() @ w.cpu().numpy())
+
+
+def test_einsum_ellipsis_cuda_if_available():
+    if not torch.cuda.is_available():
+        return
+
+    x = torch.tensor(_array((2, 3, 4), 1.0), device="cuda",
+                     requires_grad=True)
+    w = torch.tensor(_array((1, 4, 5), 2.0), device="cuda",
+                     requires_grad=True)
+
+    y = torch.einsum("...ij,...jk->...ik", x, w)
+    y.sum().backward()
+
+    assert y.device == "cuda"
+    assert y.shape == (2, 3, 5)
+    assert x.grad.device == "cuda"
+    assert w.grad.device == "cuda"
+
+
+def test_einsum_repeated_labels_cuda_if_available():
+    if not torch.cuda.is_available():
+        return
+
+    x = torch.tensor(_array((2, 3, 3), 1.0), device="cuda",
+                     requires_grad=True)
+
+    y = torch.einsum("...ii->...", x)
+    y.sum().backward()
+
+    assert y.device == "cuda"
+    assert y.shape == (2,)
+    assert x.grad.device == "cuda"
+    expected_grad = np.zeros((2, 3, 3))
+    expected_grad[:, np.arange(3), np.arange(3)] = 1.0
+    assert np.allclose(x.grad.cpu().numpy(), expected_grad)

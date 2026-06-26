@@ -194,11 +194,20 @@ class Tensor:
     def masked_fill(self, mask, value):
         return F.masked_fill(self, mask, value)
 
+    def nonzero(self, as_tuple=False):
+        return F.nonzero(self, as_tuple=as_tuple)
+
     def index_select(self, dim, index):
         return F.index_select(self, dim, index)
 
     def gather(self, dim, index):
         return F.gather(self, dim, index)
+
+    def scatter(self, dim, index, src):
+        return F.scatter(self, dim, index, src)
+
+    def scatter_add(self, dim, index, src):
+        return F.scatter_add(self, dim, index, src)
 
     def sort(self, dim=-1, descending=False, stable=False):
         return F.sort(self, dim=dim, descending=descending, stable=stable)
@@ -209,6 +218,10 @@ class Tensor:
     def max(self, dim=None, keepdim=False, axis=None, keepdims=None):
         return F.max(self, dim=dim, keepdim=keepdim, axis=axis,
                      keepdims=keepdims)
+
+    def amax(self, dim=None, keepdim=False, axis=None, keepdims=None):
+        return F.amax(self, dim=dim, keepdim=keepdim, axis=axis,
+                      keepdims=keepdims)
 
     def renamed(self, name):
         self.name = name

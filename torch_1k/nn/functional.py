@@ -21,8 +21,16 @@ def dropout(input, p=0.5, training=True, inplace=False):
     return input * Tensor(mask, requires_grad=False)
 
 
-def cross_entropy(input, target, reduction="mean"):
-    return CrossEntropyLoss(reduction=reduction)(input, target)
+def cross_entropy(
+    input, target, weight=None, ignore_index=-100, reduction="mean",
+    label_smoothing=0.0,
+):
+    return CrossEntropyLoss(
+        weight=weight,
+        ignore_index=ignore_index,
+        reduction=reduction,
+        label_smoothing=label_smoothing,
+    )(input, target)
 
 
 def mse_loss(input, target, reduction="mean"):

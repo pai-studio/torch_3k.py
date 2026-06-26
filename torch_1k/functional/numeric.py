@@ -28,10 +28,36 @@ def _normalize_axis(axis, ndim, name):
     return axis
 
 
+def _normalize_axes(axis, ndim, name):
+    if axis is None:
+        return None
+    if isinstance(axis, (int, np.integer)):
+        axes = (int(axis),)
+    elif isinstance(axis, (tuple, list)):
+        axes = tuple(int(item) for item in axis)
+    else:
+        raise TypeError(f'{name} dim must be an integer or tuple of integers')
+
+    normalized = []
+    for item in axes:
+        if item < 0:
+            item += ndim
+        if item < 0 or item >= ndim:
+            raise IndexError(f'{name} dim is out of range')
+        if item in normalized:
+            raise ValueError(f'{name} dim contains duplicates')
+        normalized.append(item)
+    return tuple(normalized)
+
+
 def _ensure_integer_index(index, name):
     if not np.issubdtype(index.dtype, np.integer):
         raise TypeError(f'{name} index must be an integer tensor')
     return index.astype('int64', copy=False)
+
+
+def _array_scalar_bool(value):
+    return bool(backend.as_numpy(value).item())
 
 
 def _broadcast_index_selector(index_shape, axis, index, xp):
@@ -471,6 +497,52 @@ def max(input, dim=None, keepdim=False, axis=None, keepdims=None):
     return MaxResult(values=values, indices=_max_indices(input, axis, keepdim))
 
 
+class Amax(Function):
+    def __init__(self, axis=None, keepdims=False):
+        self.axis = axis
+        self.keepdims = keepdims
+        self.normalized_axes = None
+        self.x_shape = None
+
+    def forward(self, x):
+        xp = backend.get_array_module(x)
+        self.x_shape = x.shape
+        axes = _normalize_axes(self.axis, x.ndim, 'amax')
+        self.normalized_axes = axes
+        if axes is None:
+            return xp.max(x, keepdims=self.keepdims)
+        return xp.max(x, axis=axes, keepdims=self.keepdims)
+
+    def backward(self, gy):
+        from torch_1k.tensor import Tensor
+
+        x = self.inputs[0]
+        xp = backend.get_array_module(x.data)
+        axes = self.normalized_axes
+        if axes is None:
+            axes = tuple(range(x.ndim))
+
+        y = self.outputs[0]().data
+        gy_data = gy.data
+        if not self.keepdims:
+            shape = list(y.shape)
+            for axis in sorted(axes):
+                shape.insert(axis, 1)
+            y = y.reshape(tuple(shape))
+            gy_data = gy_data.reshape(tuple(shape))
+
+        mask = x.data == y
+        count = xp.sum(mask, axis=axes, keepdims=True)
+        return Tensor(gy_data * mask / count)
+
+
+def amax(input, dim=None, keepdim=False, axis=None, keepdims=None):
+    axis = dim if dim is not None else axis
+    if keepdims is not None:
+        keepdim = keepdims
+    return Amax(axis=axis, keepdims=keepdim)(input)
+
+
 def argmax(input, dim=None, keepdim=False, axis=None, keepdims=None):
     from torch_1k.tensor import Tensor
 
@@ -568,8 +640,42 @@ class Where(Function):
             _adjust_grad_shape(gother, self.other_shape),
         )
 
-def where(condition, input, other):
+def where(condition, input=None, other=None):
+    from torch_1k.tensor import ensure_tensor
+
+    if input is None and other is None:
+        condition = ensure_tensor(condition)
+        if condition.dtype != bool:
+            raise TypeError('where condition must be a bool tensor')
+        return nonzero(condition, as_tuple=True)
+    if input is None or other is None:
+        raise TypeError('where expects either one or three arguments')
     return Where()(condition, input, other)
+
+
+def nonzero(input, as_tuple=False):
+    from torch_1k.tensor import Tensor, ensure_tensor
+
+    x = ensure_tensor(input)
+    xp = backend.get_array_module(x.data)
+
+    if x.ndim == 0:
+        active = _array_scalar_bool(x.data != 0)
+        size = 1 if active else 0
+        if as_tuple:
+            return (Tensor(xp.arange(size, dtype='int64'),
+                           requires_grad=False),)
+        return Tensor(xp.empty((size, 0), dtype='int64'), requires_grad=False)
+
+    indices = tuple(index.astype('int64', copy=False)
+                    for index in xp.nonzero(x.data))
+    if as_tuple:
+        return tuple(Tensor(index, requires_grad=False) for index in indices)
+    if indices:
+        stacked = xp.stack(indices, axis=1)
+    else:
+        stacked = xp.empty((0, 0), dtype='int64')
+    return Tensor(stacked.astype('int64', copy=False), requires_grad=False)
 
 
 def masked_fill(input, mask, value):
@@ -653,6 +759,103 @@ class Gather(Function):
 
 def gather(input, dim, index):
     return Gather(dim)(input, index)
+
+
+def _validate_scatter_inputs(x, index, src, axis, name):
+    if x.ndim == 0:
+        raise ValueError(f'{name} expects at least 1-dimensional input')
+    if index.ndim != x.ndim:
+        raise ValueError(f'{name} index must have the same rank as input')
+    if src.shape != index.shape:
+        raise ValueError(f'{name} src shape must match index shape')
+
+    axis = _normalize_axis(axis, x.ndim, name)
+    index = _ensure_integer_index(index, name)
+    for dim, size in enumerate(index.shape):
+        if dim != axis and size > x.shape[dim]:
+            raise ValueError(f'{name} index shape is out of bounds')
+
+    xp = backend.get_array_module(x, index, src)
+    invalid = (index < 0) | (index >= x.shape[axis])
+    if _array_scalar_bool(xp.any(invalid)):
+        raise IndexError(f'{name} index is out of bounds for dim')
+    return axis, index, xp
+
+
+class Scatter(Function):
+    def __init__(self, axis):
+        self.axis = axis
+        self.normalized_axis = None
+        self.index = None
+        self.x_shape = None
+        self.src_shape = None
+        self.selector = None
+
+    def forward(self, x, index, src):
+        axis, index, xp = _validate_scatter_inputs(
+            x, index, src, self.axis, 'scatter'
+        )
+        self.normalized_axis = axis
+        self.index = index
+        self.x_shape = x.shape
+        self.src_shape = src.shape
+        self.selector = _broadcast_index_selector(index.shape, axis, index, xp)
+
+        y = x.copy()
+        y[tuple(self.selector)] = src
+        return y
+
+    def backward(self, gy):
+        from torch_1k.tensor import Tensor
+
+        xp = backend.get_array_module(gy.data, self.index)
+        gx = gy.data.copy()
+        gx[tuple(self.selector)] = 0
+        gsrc = xp.take_along_axis(
+            gy.data, self.index, axis=self.normalized_axis
+        )
+        return Tensor(gx), None, Tensor(gsrc)
+
+
+class ScatterAdd(Function):
+    def __init__(self, axis):
+        self.axis = axis
+        self.normalized_axis = None
+        self.index = None
+        self.x_shape = None
+        self.src_shape = None
+        self.selector = None
+
+    def forward(self, x, index, src):
+        axis, index, xp = _validate_scatter_inputs(
+            x, index, src, self.axis, 'scatter_add'
+        )
+        self.normalized_axis = axis
+        self.index = index
+        self.x_shape = x.shape
+        self.src_shape = src.shape
+        self.selector = _broadcast_index_selector(index.shape, axis, index, xp)
+
+        y = x.copy()
+        xp.add.at(y, tuple(self.selector), src)
+        return y
+
+    def backward(self, gy):
+        from torch_1k.tensor import Tensor
+
+        xp = backend.get_array_module(gy.data, self.index)
+        gsrc = xp.take_along_axis(
+            gy.data, self.index, axis=self.normalized_axis
+        )
+        return Tensor(gy.data), None, Tensor(gsrc)
+
+
+def scatter(input, dim, index, src):
+    return Scatter(dim)(input, index, src)
+
+
+def scatter_add(input, dim, index, src):
+    return ScatterAdd(dim)(input, index, src)
 
 
 class Sort(Function):

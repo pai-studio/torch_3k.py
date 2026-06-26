@@ -63,8 +63,8 @@ python -m compileall -q torch_1k examples
 
 ## TODO / 未完成事项
 
-1. 尚未实现 `CrossEntropyLoss` 的 `weight`、`ignore_index`、`label_smoothing`。
-2. 尚未实现高维 `(N, C, ...)` 交叉熵输入形态。
+1. `CrossEntropyLoss` 的 `weight`、`ignore_index`、`label_smoothing` 已在 PLAN-028 补齐。
+2. 高维 `(N, C, ...)` 交叉熵输入形态已在 PLAN-028 补齐。
 3. 尚未实现完整 dtype promotion。
 
 ## 复核结论

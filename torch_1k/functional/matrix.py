@@ -1,4 +1,5 @@
 import builtins
+import string
 
 from torch_1k import backend
 from torch_1k.function import Function
@@ -188,14 +189,27 @@ def chunk(input, chunks, dim=0):
     return split(x, split_size, dim=dim)
 
 
+def _split_einsum_spec(spec):
+    if spec.count('...') > 1:
+        raise ValueError('einsum spec can contain at most one ellipsis')
+    if '...' in spec:
+        prefix, suffix = spec.split('...')
+        has_ellipsis = True
+    else:
+        prefix, suffix = spec, ''
+        has_ellipsis = False
+
+    labels = prefix + suffix
+    if '.' in labels:
+        raise ValueError('einsum ellipsis must be written as "..."')
+    return prefix, has_ellipsis, suffix
+
+
 def _parse_einsum_equation(equation):
     if not isinstance(equation, str):
         raise TypeError('einsum equation must be a string')
 
     equation = ''.join(equation.split())
-    if '...' in equation:
-        raise NotImplementedError('einsum ellipsis is not supported')
-
     parts = equation.split('->')
     if len(parts) > 2:
         raise ValueError('einsum equation has too many arrows')
@@ -205,31 +219,139 @@ def _parse_einsum_equation(equation):
     if input_specs == ('',) and input_part != '':
         raise ValueError('einsum equation has invalid input specs')
 
+    input_templates = []
     for spec in input_specs:
-        if len(set(spec)) != len(spec):
-            raise NotImplementedError(
-                'einsum repeated labels in one input are not supported'
-            )
+        prefix, has_ellipsis, suffix = _split_einsum_spec(spec)
+        input_templates.append((prefix, has_ellipsis, suffix))
 
     if len(parts) == 2:
         output_spec = parts[1]
         if ',' in output_spec:
             raise ValueError('einsum output spec cannot contain commas')
-        if len(set(output_spec)) != len(output_spec):
+        output_template = _split_einsum_spec(output_spec)
+        output_labels = output_template[0] + output_template[2]
+        if len(set(output_labels)) != len(output_labels):
             raise ValueError('einsum output labels must be unique')
-        input_labels = set(''.join(input_specs))
-        if any(label not in input_labels for label in output_spec):
+        input_labels = set(
+            ''.join(prefix + suffix for prefix, _, suffix in input_templates)
+        )
+        if any(label not in input_labels for label in output_labels):
             raise ValueError('einsum output labels must appear in inputs')
     else:
+        output_template = None
+
+    return tuple(input_templates), output_template
+
+
+def _ellipsis_labels(used_labels, count):
+    labels = ''.join(
+        label for label in string.ascii_letters if label not in used_labels
+    )
+    if len(labels) < count:
+        raise NotImplementedError(
+            'einsum ellipsis needs more internal labels than are available'
+        )
+    return labels[:count]
+
+
+def _unique_einsum_spec(spec):
+    unique = []
+    seen = set()
+    for label in spec:
+        if label in seen:
+            continue
+        seen.add(label)
+        unique.append(label)
+    return ''.join(unique)
+
+
+def _validate_repeated_label_shape(spec, shape):
+    label_sizes = {}
+    for label, size in zip(spec, shape):
+        if label in label_sizes and label_sizes[label] != size:
+            raise ValueError(
+                'einsum repeated labels must have matching dimensions'
+            )
+        label_sizes[label] = size
+
+
+def _expand_einsum_equation(input_templates, output_template, input_shapes):
+    user_labels = set()
+    ellipsis_ndims = []
+    for (prefix, has_ellipsis, suffix), shape in zip(
+        input_templates, input_shapes
+    ):
+        user_labels.update(prefix)
+        user_labels.update(suffix)
+        explicit_ndim = len(prefix) + len(suffix)
+        if len(shape) < explicit_ndim:
+            raise ValueError(
+                'einsum operand has fewer dimensions than its subscript'
+            )
+        if has_ellipsis:
+            ellipsis_ndims.append(len(shape) - explicit_ndim)
+        elif len(shape) != explicit_ndim:
+            raise ValueError(
+                'einsum operand dimensions do not match its subscript'
+            )
+        else:
+            ellipsis_ndims.append(0)
+
+    ellipsis_ndim = max(ellipsis_ndims) if ellipsis_ndims else 0
+    ellipsis_labels = _ellipsis_labels(user_labels, ellipsis_ndim)
+
+    input_specs = []
+    for (prefix, has_ellipsis, suffix), ellipsis_input_ndim in zip(
+        input_templates, ellipsis_ndims
+    ):
+        labels = ''
+        if has_ellipsis and ellipsis_input_ndim:
+            labels = ellipsis_labels[ellipsis_ndim - ellipsis_input_ndim:]
+        input_spec = prefix + labels + suffix
+        _validate_repeated_label_shape(input_spec, shape)
+        input_specs.append(input_spec)
+
+    if output_template is None:
         label_counts = {}
         for spec in input_specs:
             for label in spec:
                 label_counts[label] = label_counts.get(label, 0) + 1
-        output_spec = ''.join(sorted(
-            label for label, count in label_counts.items() if count == 1
+        ellipsis_label_set = set(ellipsis_labels)
+        output_spec = ellipsis_labels + ''.join(sorted(
+            label for label, count in label_counts.items()
+            if count == 1 and label not in ellipsis_label_set
         ))
+    else:
+        prefix, has_ellipsis, suffix = output_template
+        output_spec = prefix + (ellipsis_labels if has_ellipsis else '') + suffix
 
-    return input_specs, output_spec
+    return tuple(input_specs), output_spec
+
+
+def _unique_spec_shape(spec, target_shape):
+    shape = []
+    seen = set()
+    for label, size in zip(spec, target_shape):
+        if label in seen:
+            continue
+        seen.add(label)
+        shape.append(size)
+    return tuple(shape)
+
+
+def _scatter_repeated_einsum_grad(gx, spec, unique_spec, target_shape, xp):
+    if spec == unique_spec:
+        return gx
+
+    out = xp.zeros(target_shape, dtype=gx.dtype)
+    base_indices = {}
+    for axis, label in enumerate(unique_spec):
+        shape = [1] * len(unique_spec)
+        shape[axis] = gx.shape[axis]
+        base_indices[label] = xp.arange(gx.shape[axis]).reshape(tuple(shape))
+    selector = tuple(base_indices[label] for label in spec)
+    out[selector] = gx
+    return out
 
 
 def _restore_einsum_grad_shape(gx, spec, present_spec, target_shape, xp):
@@ -262,17 +384,25 @@ def _restore_einsum_grad_shape(gx, spec, present_spec, target_shape, xp):
 
 class Einsum(Function):
     def __init__(self, equation):
-        self.input_specs, self.output_spec = _parse_einsum_equation(equation)
-        self.forward_equation = f"{','.join(self.input_specs)}->{self.output_spec}"
+        self.input_templates, self.output_template = _parse_einsum_equation(
+            equation
+        )
+        self.input_specs = None
+        self.output_spec = None
+        self.forward_equation = None
         self.input_shapes = None
 
     def forward(self, *xs):
-        if len(xs) != len(self.input_specs):
+        if len(xs) != len(self.input_templates):
             raise ValueError(
-                f'einsum expected {len(self.input_specs)} operands, '
+                f'einsum expected {len(self.input_templates)} operands, '
                 f'got {len(xs)}'
             )
         self.input_shapes = [x.shape for x in xs]
+        self.input_specs, self.output_spec = _expand_einsum_equation(
+            self.input_templates, self.output_template, self.input_shapes
+        )
+        self.forward_equation = f"{','.join(self.input_specs)}->{self.output_spec}"
         xp = backend.get_array_module(*xs)
         return xp.einsum(self.forward_equation, *xs)
 
@@ -297,14 +427,21 @@ class Einsum(Function):
             for other_spec in other_specs:
                 available.update(other_spec)
 
-            present_spec = ''.join(label for label in spec if label in available)
+            unique_spec = _unique_einsum_spec(spec)
+            unique_shape = _unique_spec_shape(spec, shape)
+            present_spec = ''.join(
+                label for label in unique_spec if label in available
+            )
             source_specs = [self.output_spec] + other_specs
             source_arrays = [gy.data] + other_arrays
             xp = backend.get_array_module(*source_arrays)
             equation = f"{','.join(source_specs)}->{present_spec}"
             gx = xp.einsum(equation, *source_arrays)
             gx = _restore_einsum_grad_shape(
-                gx, spec, present_spec, shape, xp
+                gx, unique_spec, present_spec, unique_shape, xp
+            )
+            gx = _scatter_repeated_einsum_grad(
+                gx, spec, unique_spec, shape, xp
             )
 
             grads.append(Tensor(gx))

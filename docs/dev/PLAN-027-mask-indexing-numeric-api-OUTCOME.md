@@ -84,8 +84,8 @@ pytest -q
 ## TODO / 未完成事项
 
 1. 尚未实现完整高级索引语义。
-2. 尚未公开 `scatter` / `scatter_add` API。
-3. 尚未实现 `where(condition)` 单参数形式。
+2. `scatter` / `scatter_add` API 已在 PLAN-030 补齐。
+3. `where(condition)` 单参数形式已在 PLAN-031 补齐。
 4. 尚未实现 `gather(..., sparse_grad=True)`。
 5. 尚未实现 `out=` 参数。
 6. 尚未实现完整 dtype promotion。

@@ -60,8 +60,8 @@ python -m compileall -q torch_1k examples
 
 ## TODO / 未完成事项
 
-1. 尚未实现 `torch.amax`。
-2. 尚未实现多维 tuple 规约。
+1. `torch.amax` 已在 PLAN-033 补齐。
+2. 多维 tuple 最大值规约已在 PLAN-033 通过 `amax(dim=(...))` 补齐。
 3. `torch.max(x, dim=...)` 的重复最大值梯度使用 `argmax` 位置；全局 `torch.max(x)` 对重复最大值平分梯度。
 4. 复杂索引和 `argmax` 梯度语义仍属于后续规约/索引 API 扩展范围。
 

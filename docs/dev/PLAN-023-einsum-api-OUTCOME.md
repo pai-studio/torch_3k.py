@@ -71,8 +71,8 @@ USE_TORCH_1K=0 python examples/example22_shape_split_chunk_repeat_compare.py
 
 ## TODO / 未完成事项
 
-1. 尚未实现 ellipsis，例如 `"...ij,jk->...ik"`。
-2. 尚未实现同一输入内部 repeated labels 的 diagonal / trace 语义，例如 `"ii->i"`。
+1. ellipsis 已在 PLAN-029 补齐，例如 `"...ij,jk->...ik"`。
+2. 同一输入内部 repeated labels 的 diagonal / trace 语义已在 PLAN-032 补齐，例如 `"ii->i"`。
 3. 尚未实现 PyTorch 的 sublist equation 格式。
 4. 尚未实现完整 dtype promotion。
 
