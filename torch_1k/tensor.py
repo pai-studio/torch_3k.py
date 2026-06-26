@@ -219,6 +219,10 @@ class Tensor:
         return F.max(self, dim=dim, keepdim=keepdim, axis=axis,
                      keepdims=keepdims)
 
+    def min(self, dim=None, keepdim=False, axis=None, keepdims=None):
+        return F.min(self, dim=dim, keepdim=keepdim, axis=axis,
+                     keepdims=keepdims)
+
     def amax(self, dim=None, keepdim=False, axis=None, keepdims=None):
         return F.amax(self, dim=dim, keepdim=keepdim, axis=axis,
                       keepdims=keepdims)

@@ -82,7 +82,7 @@ python -m compileall -q torch_1k examples
 
 ## TODO / 未完成事项
 
-1. 尚未实现 `torch.min` / `Tensor.min` 的 values/indices 语义。
+1. `torch.min` / `Tensor.min` 的 values/indices 语义已在 PLAN-035 补齐。
 2. 尚未实现 `out=` 参数。
 3. 尚未实现完整 dtype promotion。
 
