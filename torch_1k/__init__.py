@@ -4,8 +4,9 @@ from .function import Function
 from .settings import log_settings, runtime_settings
 from .functional import *
 from .tensor import (
-    Tensor, no_grad, allclose, arange, full, full_like, rand, randn, randint,
-    ones, ones_like, tensor, zeros, zeros_like,
+    Tensor, no_grad, allclose, arange, as_tensor, eye, from_numpy, full,
+    full_like, rand, rand_like, randn, randn_like, randint, ones, ones_like,
+    tensor, zeros, zeros_like,
     float32, float64, int64, long, register_ops
 )
 from .backend import device

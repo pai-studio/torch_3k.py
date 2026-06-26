@@ -7,6 +7,16 @@ class ReLU(Module):
         return F.relu(x)
 
 
+class Tanh(Module):
+    def forward(self, x):
+        return F.tanh(x)
+
+
+class Sigmoid(Module):
+    def forward(self, x):
+        return F.sigmoid(x)
+
+
 class Dropout(Module):
     def __init__(self, p=0.5, inplace=False):
         super().__init__()

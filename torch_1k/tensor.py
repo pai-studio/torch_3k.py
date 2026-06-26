@@ -143,13 +143,21 @@ class Tensor:
             dims = tuple(dims[0])
         return F.permute(self, dims)
 
-    def sum(self, dim=None, axis=None, keepdims=False):
+    def sum(self, dim=None, axis=None, keepdim=False, keepdims=None):
         axis = dim if dim is not None else axis
-        return F.sum(self, axis=axis, keepdims=keepdims)
+        keepdim = keepdim if keepdims is None else keepdims
+        return F.sum(self, axis=axis, keepdims=keepdim)
 
-    def mean(self, dim=None, axis=None, keepdims=False):
+    def mean(self, dim=None, axis=None, keepdim=False, keepdims=None):
         axis = dim if dim is not None else axis
-        return F.mean(self, axis=axis, keepdims=keepdims)
+        keepdim = keepdim if keepdims is None else keepdims
+        return F.mean(self, axis=axis, keepdims=keepdim)
+
+    def matmul(self, other):
+        return F.matmul(self, other)
+
+    def mm(self, mat2):
+        return F.matmul(self, mat2)
 
     def exp(self):
         return F.exp(self)
@@ -238,6 +246,12 @@ class Tensor:
     def renamed(self, name):
         self.name = name
         return self
+
+    def clone(self):
+        return F.clone(self)
+
+    def tolist(self):
+        return self.numpy().tolist()
 
     def numpy(self):
         return backend.as_numpy(self.data)
@@ -382,6 +396,11 @@ class Tensor:
             )
         return bool(self.item())
 
+    def __len__(self):
+        if self.ndim == 0:
+            raise TypeError('len() of a 0-d tensor')
+        return self.shape[0]
+
 
 def register_ops():
     Tensor.__neg__ = F.neg
@@ -495,6 +514,44 @@ def arange(start, end=None, step=1, device=None, dtype=None, requires_grad=False
     xp = backend.array_module_for_device(device)
     return Tensor(
         xp.arange(start, end, step, dtype=dtype),
+        requires_grad=requires_grad,
+    )
+
+def eye(n, m=None, device=None, dtype=None, requires_grad=False):
+    xp = backend.array_module_for_device(device)
+    columns = n if m is None else m
+    return Tensor(
+        xp.eye(n, columns, dtype=dtype),
+        requires_grad=requires_grad,
+    )
+
+def as_tensor(data, device=None, dtype=None):
+    if isinstance(data, Tensor):
+        if device is None and dtype is None:
+            return data
+        return data.to(device=device, dtype=dtype)
+    return Tensor(data, device=device, dtype=dtype, requires_grad=False)
+
+def from_numpy(ndarray):
+    return Tensor(ndarray, requires_grad=False)
+
+def rand_like(input, device=None, dtype=None, requires_grad=False):
+    input = ensure_tensor(input)
+    target_device = input.device if device is None else device
+    target_dtype = input.dtype if dtype is None else dtype
+    xp = backend.array_module_for_device(target_device)
+    return Tensor(
+        xp.random.rand(*input.shape).astype(target_dtype),
+        requires_grad=requires_grad,
+    )
+
+def randn_like(input, device=None, dtype=None, requires_grad=False):
+    input = ensure_tensor(input)
+    target_device = input.device if device is None else device
+    target_dtype = input.dtype if dtype is None else dtype
+    xp = backend.array_module_for_device(target_device)
+    return Tensor(
+        xp.random.randn(*input.shape).astype(target_dtype),
         requires_grad=requires_grad,
     )
 

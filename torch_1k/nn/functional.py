@@ -1,7 +1,7 @@
 from torch_1k import backend
 from torch_1k.tensor import Tensor
 from torch_1k.functional.numeric import (
-    ReLU, relu, softmax, log_softmax,
+    ReLU, log_softmax, relu, sigmoid, softmax, tanh,
 )
 from torch_1k.nn.loss import CrossEntropyLoss, MSELoss
 

@@ -8,6 +8,17 @@ from torch_1k.utils import np_sum_to
 
 
 # Reshape
+class Clone(Function):
+    def forward(self, x):
+        return x.copy()
+
+    def backward(self, gy):
+        return gy
+
+def clone(x):
+    return Clone()(x)
+
+
 class Reshape(Function):
     def __init__(self, shape):
         self.shape = shape
