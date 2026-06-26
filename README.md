@@ -14,7 +14,7 @@ Implementing PyTorch's core basic functions within 1000 lines of code
 - [x] 实现Linear算子
 - [x] 实现Dropout训练/推理模式差异
 - [x] optimizer优化模块: 实现Adam优化算法
-- [ ] 实现MLP神经网络，把torch替换为`torch_1k`可以做普通的mnist分类
+- [x] 实现训练脚本替换兼容基线，把torch替换为`torch_1k`可以跑通分类训练、评估和checkpoint
 
 ## 使用说明
 ### 安装
