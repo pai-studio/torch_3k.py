@@ -74,7 +74,7 @@ python -m compileall -q torch_1k examples
 
 ## TODO / 未完成事项
 
-1. 尚未实现 `torch.amin` / `torch.aminmax`。
+1. `torch.amin` / `torch.aminmax` 已在 PLAN-034 补齐。
 2. 尚未实现 `out=` 参数。
 3. 尚未实现完整 dtype promotion。
 

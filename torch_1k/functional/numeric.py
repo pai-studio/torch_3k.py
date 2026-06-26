@@ -7,6 +7,7 @@ from .matrix import sum_to
 
 
 MaxResult = namedtuple('MaxResult', ['values', 'indices'])
+AminMaxResult = namedtuple('AminMaxResult', ['min', 'max'])
 TopKResult = namedtuple('TopKResult', ['values', 'indices'])
 SortResult = namedtuple('SortResult', ['values', 'indices'])
 
@@ -541,6 +542,84 @@ def amax(input, dim=None, keepdim=False, axis=None, keepdims=None):
     if keepdims is not None:
         keepdim = keepdims
     return Amax(axis=axis, keepdims=keepdim)(input)
+
+
+class Amin(Function):
+    def __init__(self, axis=None, keepdims=False):
+        self.axis = axis
+        self.keepdims = keepdims
+        self.normalized_axes = None
+        self.x_shape = None
+
+    def forward(self, x):
+        xp = backend.get_array_module(x)
+        self.x_shape = x.shape
+        axes = _normalize_axes(self.axis, x.ndim, 'amin')
+        self.normalized_axes = axes
+        if axes is None:
+            return xp.min(x, keepdims=self.keepdims)
+        return xp.min(x, axis=axes, keepdims=self.keepdims)
+
+    def backward(self, gy):
+        from torch_1k.tensor import Tensor
+
+        x = self.inputs[0]
+        xp = backend.get_array_module(x.data)
+        axes = self.normalized_axes
+        if axes is None:
+            axes = tuple(range(x.ndim))
+
+        y = self.outputs[0]().data
+        gy_data = gy.data
+        if not self.keepdims:
+            shape = list(y.shape)
+            for axis in sorted(axes):
+                shape.insert(axis, 1)
+            y = y.reshape(tuple(shape))
+            gy_data = gy_data.reshape(tuple(shape))
+
+        mask = x.data == y
+        count = xp.sum(mask, axis=axes, keepdims=True)
+        return Tensor(gy_data * mask / count)
+
+
+def amin(input, dim=None, keepdim=False, axis=None, keepdims=None):
+    axis = dim if dim is not None else axis
+    if keepdims is not None:
+        keepdim = keepdims
+    return Amin(axis=axis, keepdims=keepdim)(input)
+
+
+class AminMax(Function):
+    def __init__(self, axis=None, keepdims=False):
+        self.axis = axis
+        self.keepdims = keepdims
+
+    def forward(self, x):
+        xp = backend.get_array_module(x)
+        if self.axis is None:
+            return (
+                xp.min(x, keepdims=self.keepdims),
+                xp.max(x, keepdims=self.keepdims),
+            )
+        axis = _normalize_axis(self.axis, x.ndim, 'aminmax')
+        return (
+            xp.min(x, axis=axis, keepdims=self.keepdims),
+            xp.max(x, axis=axis, keepdims=self.keepdims),
+        )
+
+    def backward(self, gy_min, gy_max):
+        raise RuntimeError('derivative for aminmax is not implemented')
+
+
+def aminmax(input, dim=None, keepdim=False, axis=None, keepdims=None):
+    axis = dim if dim is not None else axis
+    if keepdims is not None:
+        keepdim = keepdims
+    if axis is not None and not isinstance(axis, (int, np.integer)):
+        raise TypeError('aminmax dim must be an integer')
+    minimum, maximum = AminMax(axis=axis, keepdims=keepdim)(input)
+    return AminMaxResult(min=minimum, max=maximum)
 
 
 def argmax(input, dim=None, keepdim=False, axis=None, keepdims=None):

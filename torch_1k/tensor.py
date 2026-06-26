@@ -223,6 +223,14 @@ class Tensor:
         return F.amax(self, dim=dim, keepdim=keepdim, axis=axis,
                       keepdims=keepdims)
 
+    def amin(self, dim=None, keepdim=False, axis=None, keepdims=None):
+        return F.amin(self, dim=dim, keepdim=keepdim, axis=axis,
+                      keepdims=keepdims)
+
+    def aminmax(self, dim=None, keepdim=False, axis=None, keepdims=None):
+        return F.aminmax(self, dim=dim, keepdim=keepdim, axis=axis,
+                         keepdims=keepdims)
+
     def renamed(self, name):
         self.name = name
         return self
