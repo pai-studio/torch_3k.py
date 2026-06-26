@@ -10,11 +10,13 @@ class Optimizer:
         self.param_groups = []
         self._init_param_groups(parameters)
 
-    def zero_grad(self):
+    def zero_grad(self, set_to_none=False):
         for parameter in self.parameters:
             if parameter.grad is not None:
-                # parameter.grad = None
-                parameter.grad.data.fill(0)
+                if set_to_none:
+                    parameter.grad = None
+                else:
+                    parameter.grad.data.fill(0)
 
     def step(self):
         # print(f'{self.parameters=}')

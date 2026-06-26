@@ -7,6 +7,41 @@ except Exception:
     cp = None
 
 
+class device:
+    def __init__(self, type, index=None):
+        if isinstance(type, device):
+            self.type = type.type
+            self.index = type.index if index is None else index
+            return
+
+        value = str(type)
+        parsed_index = None
+        if ':' in value:
+            value, raw_index = value.split(':', 1)
+            if raw_index:
+                parsed_index = int(raw_index)
+        if value not in ('cpu', 'cuda'):
+            raise ValueError(f'unsupported device: {type}')
+
+        self.type = value
+        self.index = parsed_index if index is None else index
+
+    def __str__(self):
+        if self.index is None:
+            return self.type
+        return f'{self.type}:{self.index}'
+
+    def __repr__(self):
+        return f"device(type='{self.type}', index={self.index})"
+
+    def __eq__(self, other):
+        try:
+            other = device(other)
+        except Exception:
+            return False
+        return self.type == other.type and self.index == other.index
+
+
 def normalize_device(device):
     if device is None:
         return None

@@ -242,12 +242,18 @@ class Tensor:
     def numpy(self):
         return backend.as_numpy(self.data)
 
-    def to(self, device):
-        out = Tensor(backend.to_device(self.data, device), name=self.name,
-                     log_enabled=self.log_enabled,
-                     requires_grad=self.requires_grad)
-        if self.grad is not None:
-            out.grad = self.grad.to(device)
+    def to(self, *args, device=None, dtype=None):
+        target_device, target_dtype = _parse_to_args(args, device, dtype)
+        data = backend.to_device(
+            self.data, target_device, dtype=target_dtype,
+        )
+        requires_grad = _requires_grad_for_dtype(
+            self.requires_grad, target_dtype,
+        )
+        out = Tensor(data, name=self.name, log_enabled=self.log_enabled,
+                     requires_grad=requires_grad)
+        if requires_grad and self.grad is not None:
+            out.grad = self.grad.to(device=target_device, dtype=target_dtype)
         return out
 
     def detach(self):
@@ -255,13 +261,10 @@ class Tensor:
                       requires_grad=False)
 
     def float(self):
-        return Tensor(self.data.astype('float32'), name=self.name,
-                      log_enabled=self.log_enabled,
-                      requires_grad=self.requires_grad)
+        return self.to(dtype='float32')
 
     def long(self):
-        return Tensor(self.data.astype('int64'), name=self.name,
-                      log_enabled=self.log_enabled, requires_grad=False)
+        return self.to(dtype='int64')
 
     def cpu(self):
         return self.to('cpu')
@@ -276,22 +279,27 @@ class Tensor:
         return shape
 
     @classmethod
-    def randn(self, *shape, device=None, requires_grad=None):
+    def randn(self, *shape, device=None, dtype=None, requires_grad=None):
         shape = self._get_shape(shape)
         xp = backend.array_module_for_device(device)
-        return Tensor(xp.random.randn(*shape), requires_grad=requires_grad)
+        data = xp.random.randn(*shape)
+        if dtype is not None:
+            data = data.astype(dtype)
+        return Tensor(data, requires_grad=requires_grad)
 
     @classmethod
-    def zeros(self, *shape, device=None, requires_grad=None):
+    def zeros(self, *shape, device=None, dtype=None, requires_grad=None):
         shape = self._get_shape(shape)
         xp = backend.array_module_for_device(device)
-        return Tensor(xp.zeros(shape), requires_grad=requires_grad)
+        return Tensor(xp.zeros(shape, dtype=dtype),
+                      requires_grad=requires_grad)
 
     @classmethod
-    def ones(self, *shape, device=None, requires_grad=None):
+    def ones(self, *shape, device=None, dtype=None, requires_grad=None):
         shape = self._get_shape(shape)
         xp = backend.array_module_for_device(device)
-        return Tensor(xp.ones(shape), requires_grad=requires_grad)
+        return Tensor(xp.ones(shape, dtype=dtype),
+                      requires_grad=requires_grad)
 
     @classmethod
     def zeros_like(self, data):
@@ -321,6 +329,12 @@ class Tensor:
     def ndim(self):
         return self.data.ndim
 
+    def dim(self):
+        return self.ndim
+
+    def numel(self):
+        return int(self.data.size)
+
     def size(self, dim=None):
         # torch-like, 而不是self.data.size
         if dim is None:
@@ -346,6 +360,10 @@ class Tensor:
     @property
     def device(self):
         return backend.device_of(self.data)
+
+    @property
+    def is_cuda(self):
+        return self.device == 'cuda'
 
     def __repr__(self):
         return (
@@ -402,18 +420,69 @@ def ensure_tensor(data):
 def make_tensor(data):
     return Tensor(data)
 
+def _is_dtype_like(value):
+    if value is None or isinstance(value, (Tensor, backend.device)):
+        return False
+    try:
+        np.dtype(value)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+def _parse_to_args(args, device=None, dtype=None):
+    if len(args) > 2:
+        raise TypeError('to expected at most 2 positional arguments')
+    if len(args) == 2:
+        if device is not None or dtype is not None:
+            raise TypeError('to got both positional and keyword targets')
+        device, dtype = args
+    elif len(args) == 1:
+        target = args[0]
+        if isinstance(target, Tensor):
+            if device is None:
+                device = target.device
+            if dtype is None:
+                dtype = target.dtype
+        elif _is_dtype_like(target):
+            if dtype is not None:
+                raise TypeError('to got dtype twice')
+            dtype = target
+        else:
+            if device is not None:
+                raise TypeError('to got device twice')
+            device = target
+    return device, dtype
+
+def _requires_grad_for_dtype(requires_grad, dtype):
+    if dtype is None:
+        return requires_grad
+    return requires_grad and np.issubdtype(np.dtype(dtype), np.floating)
+
 def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
     a = ensure_tensor(a)
     b = ensure_tensor(b)
     return a.shape == b.shape and np.allclose(a.numpy(), b.numpy(), rtol=rtol, atol=atol, equal_nan=equal_nan)
 
-def rand(*shape, device=None, requires_grad=False):
-    xp = backend.array_module_for_device(device)
-    return Tensor(xp.random.rand(*shape), requires_grad=requires_grad)
+def _normalize_shape_args(shape):
+    if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
+        return tuple(shape[0])
+    return tuple(shape)
 
-def randn(*shape, device=None, requires_grad=False):
+def rand(*shape, device=None, dtype=None, requires_grad=False):
+    shape = _normalize_shape_args(shape)
     xp = backend.array_module_for_device(device)
-    return Tensor(xp.random.randn(*shape), requires_grad=requires_grad)
+    data = xp.random.rand(*shape)
+    if dtype is not None:
+        data = data.astype(dtype)
+    return Tensor(data, requires_grad=requires_grad)
+
+def randn(*shape, device=None, dtype=None, requires_grad=False):
+    shape = _normalize_shape_args(shape)
+    xp = backend.array_module_for_device(device)
+    data = xp.random.randn(*shape)
+    if dtype is not None:
+        data = data.astype(dtype)
+    return Tensor(data, requires_grad=requires_grad)
 
 def _normalize_size(size):
     if isinstance(size, int):
@@ -448,11 +517,13 @@ def randint(low, high=None, size=None, device=None, dtype=None,
         data = data.astype(dtype)
     return Tensor(data, requires_grad=requires_grad)
 
-def zeros(*shape, device=None, requires_grad=False):
-    return Tensor.zeros(*shape, device=device, requires_grad=requires_grad)
+def zeros(*shape, device=None, dtype=None, requires_grad=False):
+    return Tensor.zeros(*shape, device=device, dtype=dtype,
+                        requires_grad=requires_grad)
 
-def ones(*shape, device=None, requires_grad=False):
-    return Tensor.ones(*shape, device=device, requires_grad=requires_grad)
+def ones(*shape, device=None, dtype=None, requires_grad=False):
+    return Tensor.ones(*shape, device=device, dtype=dtype,
+                       requires_grad=requires_grad)
 
 def zeros_like(input, device=None, dtype=None, requires_grad=False):
     data = input.data if isinstance(input, Tensor) else backend.ensure_array(input)
@@ -501,3 +572,4 @@ def tensor(data, device=None, dtype=None, requires_grad=False):
 float32 = np.float32
 float64 = np.float64
 long = np.int64
+int64 = np.int64

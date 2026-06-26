@@ -1,6 +1,6 @@
 import weakref
 from .parameter import Parameter
-from ..tensor import Tensor
+from ..tensor import Tensor, _parse_to_args
 from .. import backend
 from ..settings import train_model, eval_model
 
@@ -27,20 +27,21 @@ class Module:
     def eval(self):
         return self.train(False)
 
-    def to(self, device):
+    def to(self, *args, device=None, dtype=None):
+        device, dtype = _parse_to_args(args, device, dtype)
         for name in self._parameters:
             obj = self.__dict__[name]
             if isinstance(obj, Module):
-                obj.to(device)
+                obj.to(device=device, dtype=dtype)
             elif isinstance(obj, Parameter):
-                obj.data = backend.to_device(obj.data, device)
+                obj.data = backend.to_device(obj.data, device, dtype=dtype)
                 if obj.grad is not None:
-                    obj.grad = obj.grad.to(device)
+                    obj.grad = obj.grad.to(device=device, dtype=dtype)
         for name in self._buffers:
             obj = self.__dict__[name]
-            obj.data = backend.to_device(obj.data, device)
+            obj.data = backend.to_device(obj.data, device, dtype=dtype)
             if obj.grad is not None:
-                obj.grad = obj.grad.to(device)
+                obj.grad = obj.grad.to(device=device, dtype=dtype)
         return self
 
     def __setattr__(self, name, value):
@@ -86,6 +87,33 @@ class Module:
         for _, parameter in self.named_parameters():
             yield parameter
 
+    def children(self):
+        for _, module in self.named_children():
+            yield module
+
+    def named_children(self):
+        seen = set()
+        for name in self._parameters:
+            obj = self.__dict__[name]
+            if isinstance(obj, Module) and id(obj) not in seen:
+                seen.add(id(obj))
+                yield name, obj
+
+    def modules(self):
+        for _, module in self.named_modules():
+            yield module
+
+    def named_modules(self, memo=None, prefix=''):
+        if memo is None:
+            memo = set()
+        if id(self) in memo:
+            return
+        memo.add(id(self))
+        yield prefix, self
+        for name, module in self.named_children():
+            child_prefix = f'{prefix}.{name}' if prefix else name
+            yield from module.named_modules(memo, child_prefix)
+
     def named_parameters(self, prefix=''):
         for name in self._parameters:
             obj = self.__dict__[name]
@@ -105,9 +133,12 @@ class Module:
                 child_prefix = f'{prefix}{name}.'
                 yield from obj.named_buffers(child_prefix)
 
-    def zero_grad(self):
+    def zero_grad(self, set_to_none=False):
         for parameter in self.parameters():
-            parameter.zero_grad()
+            if set_to_none or parameter.grad is None:
+                parameter.zero_grad()
+            else:
+                parameter.grad.data.fill(0)
 
     def state_dict(self, prefix=''):
         state = {}

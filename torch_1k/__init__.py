@@ -6,8 +6,9 @@ from .functional import *
 from .tensor import (
     Tensor, no_grad, allclose, arange, full, full_like, rand, randn, randint,
     ones, ones_like, tensor, zeros, zeros_like,
-    float32, float64, long, register_ops
+    float32, float64, int64, long, register_ops
 )
+from .backend import device
 from .misc import *
 from . import cuda
 

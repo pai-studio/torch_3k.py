@@ -1,6 +1,6 @@
 from .parameter import Parameter
 from .module import Module
-from .sequential import Sequential
+from .sequential import Identity, ModuleList, Sequential
 from .activation import ReLU, Dropout, Softmax, LogSoftmax
 from .conv import Conv2d
 from .pool import MaxPool2d
